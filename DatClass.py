@@ -115,7 +115,7 @@ class DatFile(object):
         if (self.doFFT == True):
             gpu_Data = cp.asarray(self.Data, dtype=cp.float64)
             self.gpu_fft_data = cp.fft.rfft(gpu_Data)
-            self.gpu_fft_data = self.gpu_fft_data[1:,-1]
+            self.gpu_fft_data = self.gpu_fft_data[1:-1]
 
             #self.gpu_fft_data = cp.zeros(self.NSamps//2+1, np.complex128)
 

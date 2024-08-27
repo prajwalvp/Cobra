@@ -305,9 +305,10 @@ class Search(object):
         self.addInterpEccBinary = mod.get_function("AddInterpEccBinary")
         self.addInterpGRBinary = mod.get_function("addInterpGRBinary")
 
-        self.MultNoise = cp.RawKernel(
-            "pycuda::complex<double> *a, double *b",
-            "a[i] = a[i]*b[i]",
+        self.MultNoise = cp.ElementwiseKernel(
+            "complex128 a, float64 b",
+            "complex128 c",
+            "c = a*b",
             "MultNoise")
         # self.MultNoise = mod.get_function("MultNoise")
 
@@ -761,8 +762,10 @@ class Search(object):
                 self.Scatter(rsig, isig, tau, self.DatFiles[i].SampleFreqs, grid=(
                     self.DatFiles[i].Fblocks, 1), block=(self.block_size, 1, 1))
 
+            output_array = cp.empty_like(self.DatFiles[i].gpu_pulsar_fft[1:-1])    
             self.MultNoise(
-                self.DatFiles[i].gpu_pulsar_fft[1:-1], self.DatFiles[i].Noise)
+                self.DatFiles[i].gpu_pulsar_fft[1:-1], self.DatFiles[i].Noise, output_array)
+            self.DatFiles[i].gpu_pulsar_fft[1:-1] = output_array
 
 
             # Compute the conjugate dot product for mcdot

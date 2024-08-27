@@ -5,14 +5,20 @@ import numpy as np
 import os
 import pickle
 
-import pycuda.autoinit
-import pycuda.gpuarray as gpuarray
-from pycuda.compiler import SourceModule
-import pycuda.cumath as cumath
-from pycuda.elementwise import ElementwiseKernel
-import pycuda.driver as drv
-import skcuda.fft as fft
-import skcuda.linalg as cula
+#Cupy
+import cupy as cp
+from cupyx.scipy.fft import get_fft_plan
+
+
+#pycuda
+#import pycuda.autoinit
+#import pycuda.gpuarray as gpuarray
+#from pycuda.compiler import SourceModule
+#import pycuda.cumath as cumath
+#from pycuda.elementwise import ElementwiseKernel
+#import pycuda.driver as drv
+#import skcuda.fft as fft
+#import skcuda.linalg as cula
 
 
 class DatFile(object):
@@ -107,30 +113,28 @@ class DatFile(object):
             self.BaseTime += TDiff*24*60*60
 
         if (self.doFFT == True):
-            gpu_Data = gpuarray.to_gpu(np.float64(self.Data))
-            self.gpu_fft_data = gpuarray.zeros(self.NSamps//2+1, np.complex128)
+            gpu_Data = cp.asarray(self.Data, dtype=cp.float64)
+            self.gpu_fft_data = cp.fft.rfft(gpu_Data)
+            self.gpu_fft_data = self.gpu_fft_data[1:,-1]
 
-            self.Plan = fft.Plan(self.NSamps, np.float64, np.complex128)
-            fft.fft(gpu_Data, self.gpu_fft_data, self.Plan)
-            self.gpu_fft_data = self.gpu_fft_data[1:-1]
+            #self.gpu_fft_data = cp.zeros(self.NSamps//2+1, np.complex128)
 
-            gpu_Data.gpudata.free()
+            #self.Plan = fft.Plan(self.NSamps, np.float64, np.complex128)
+            #self.Plan = get_fft_plan(self.NSamps, np.float64, np.complex128)
+            #fft.fft(gpu_Data, self.gpu_fft_data, self.Plan)
+            #self.gpu_fft_data = self.gpu_fft_data[1:-1]
 
-# self.Real = gpuarray.empty(self.NSamps/2-1, np.float64)
-# self.Imag = gpuarray.empty(self.NSamps/2-1, np.float64)
-# self.Real = gpuarray.to_gpu(np.float64(gpu_fftData.real[1:-1].get()))
-# self.Imag = gpuarray.to_gpu(np.float64(gpu_fftData.imag[1:-1].get()))
+            #gpu_Data.gpudata.free()
+
             self.FSamps = len(self.gpu_fft_data)
 
             self.CalcNoise(cut=False, mode=1)
 
-            # self.SampleFreqs = gpuarray.empty(self.FSamps, np.float64)
-            # self.SampleFreqs = gpuarray.to_gpu(2.0*np.pi*np.float64(np.arange(1,self.FSamps+1))/self.TObs)
 
-            self.gpu_time = gpuarray.to_gpu(np.float64(self.BaseTime))
-            self.gpu_pulsar_signal = gpuarray.empty(self.NSamps, np.float64)
-            self.gpu_pulsar_fft = gpuarray.empty(
-                self.NSamps//2+1, np.complex128)
+            self.gpu_time = cp.asarray(self.BaseTime, dtype=cp.float64)
+            self.gpu_pulsar_signal = cp.empty(self.NSamps, dtype=cp.float64)
+            self.gpu_pulsar_fft = cp.empty(
+                self.NSamps//2+1, dtype=cp.complex128)
 
             self.block_size = 128
             self.Tblocks = int(np.ceil(self.NSamps*1.0/self.block_size))
@@ -145,9 +149,9 @@ class DatFile(object):
         OComp = self.gpu_fft_data.get()
         NComp = CompRan*OComp
 
-        self.gpu_fft_data = gpuarray.to_gpu(np.complex128(NComp))
-        self.Real = gpuarray.to_gpu(np.float64(NComp.real))
-        self.Imag = gpuarray.to_gpu(np.float64(NComp.imag))
+        self.gpu_fft_data = cp.asarray(NComp, dtype= cp.complex128)
+        self.Real = cp.asarray(NComp.real, dtype=cp.float64)
+        self.Imag = cp.asarray(NComp.imag, dtype=cp.float64)
 
     def parseInf(self):
         inf = open(self.root+".inf").readlines()
@@ -235,8 +239,8 @@ class DatFile(object):
                     print("stop!", i, stop)
                     stop = self.FSamps
 
-                r2 = cula.dot(self.Real[start:stop], self.Real[start:stop:])
-                i2 = cula.dot(self.Imag[start:stop], self.Imag[start:stop])
+                r2 = cp.dot(self.Real[start:stop], self.Real[start:stop:])
+                i2 = cp.dot(self.Imag[start:stop], self.Imag[start:stop])
                 noisesamps = len(self.Imag[start:stop])*2
                 noise = np.sqrt((r2+i2)/noisesamps)
                 noisevec[start:stop] = 1.0/noise
@@ -258,7 +262,7 @@ class DatFile(object):
                 fftdata.real[Rbad] = np.random.normal(0, 1, NRbad)
                 fftdata.imag[Ibad] = np.random.normal(0, 1, NIbad)
                 print("bad", NRbad, NIbad)
-                self.gpu_fft_data = gpuarray.to_gpu(np.complex128(fftdata))
+                self.gpu_fft_data = cp.asarray(fftdata, dtype=cp.complex128)
         if (mode == 1):
             # r2 = cula.dot(self.Real[self.FSamps/2:], self.Real[self.FSamps/2:])
             # i2   = cula.dot(self.Imag[self.FSamps/2:], self.Imag[self.FSamps/2:])
@@ -277,7 +281,7 @@ class DatFile(object):
             noisevec[:] = 1.0/noise
 
         # self.Noise = gpuarray.empty(self.FSamps, np.float64)
-        self.Noise = gpuarray.to_gpu(np.float64(noisevec))
+        self.Noise = cp.asarray(noisevec, dtype=cp.float64)
 
     def WriteSignalToDat(self, outfile, noise=0):
         sig = self.gpu_pulsar_signal.get()

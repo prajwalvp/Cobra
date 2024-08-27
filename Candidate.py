@@ -313,6 +313,7 @@ class Candidate(object):
 
         self.n_dims = len(self.params)
         self.n_params = 2*self.n_dims - 1
+        #self.n_params = self.n_dims
 
         if (self.FitGRBinary == True):
             self.n_params = 2*self.n_dims - 1 + 6  # includes PK parameters

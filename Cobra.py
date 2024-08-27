@@ -11,18 +11,24 @@ import corner
 import scipy.interpolate as interp
 from scipy.optimize import fmin
 
-import pycuda.autoinit
-import pycuda.gpuarray as gpuarray
-from pycuda.compiler import SourceModule
-import pycuda.cumath as cumath
-from pycuda.elementwise import ElementwiseKernel
-import pycuda.driver as drv
-import skcuda.fft as fft
-import skcuda.linalg as cula
-import skcuda.cublas as cublas
+### Cupy
+import cupy as cp
+#from cupy.cuda import cublas
 
-cula.init()
-h = cublas.cublasCreate()
+
+### Pycuda and scikit-cuda
+#import pycuda.autoinit
+#import pycuda.gpuarray as gpuarray
+#from pycuda.compiler import SourceModule
+#import pycuda.cumath as cumath
+#rom pycuda.elementwise import ElementwiseKernel
+#import pycuda.driver as drv
+#import skcuda.fft as fft
+#import skcuda.linalg as cula
+#import skcuda.cublas as cublas
+
+#cula.init()
+#h = cublas.cublasCreate()
 
 
 class Search(object):
@@ -79,9 +85,14 @@ class Search(object):
 
         self.AverageProf = None
         self.AverageBins = None
-        mod = SourceModule("""
+        mod = cp.RawModule(
+                   code="""
+                   #ifndef M_PI
+                   #define M_PI 3.14159265358979323846
+                   #endif
 
-		    __global__ void AddAcceleration(double *a, double *orig, double accel, double period, double phase, double width)
+
+		    extern "C" __global__ void AddAcceleration(double *a, double *orig, double accel, double period, double phase, double width)
 		  {
 			const int i = blockDim.x*blockIdx.x + threadIdx.x;
 
@@ -98,7 +109,7 @@ class Search(object):
 
 
 
-		    __global__ void AddInterpCircBinary(double *a, double *orig, double *InterpCosBinary, double *InterpSinBinary, double BinaryPeriod, double BinaryPhase, double BinaryAmp, double phase, double period, double width, double blin, double eta, double etaB, double Heta2B)
+		    extern "C" __global__ void AddInterpCircBinary(double *a, double *orig, double *InterpCosBinary, double *InterpSinBinary, double BinaryPeriod, double BinaryPhase, double BinaryAmp, double phase, double period, double width, double blin, double eta, double etaB, double Heta2B)
 		  {
 			const int i = blockDim.x*blockIdx.x + threadIdx.x;
 			
@@ -122,7 +133,7 @@ class Search(object):
 		       
 		   }
 
-		    __global__ void AddInterpEccBinary(double *a, double *orig, double *InterpCosBinary, double *InterpSinBinary, double BinaryPeriod, double BinaryPhase, double BinaryAmp, double BinaryCosW, double BinarySinW, double Ecc, double phase, double period, double width, double blin, double Alpha, double Beta)
+		    extern "C" __global__ void AddInterpEccBinary(double *a, double *orig, double *InterpCosBinary, double *InterpSinBinary, double BinaryPeriod, double BinaryPhase, double BinaryAmp, double BinaryCosW, double BinarySinW, double Ecc, double phase, double period, double width, double blin, double Alpha, double Beta)
 		  {
 			const int i = blockDim.x*blockIdx.x + threadIdx.x;
 			
@@ -152,7 +163,7 @@ class Search(object):
 		       
 		   }
 
-		   __global__ void addInterpGRBinary(double *a, double *orig, double *InterpCosBinary, double *InterpSinBinary, double *InterpTrueAnomaly, double BinaryPeriod, double BinaryPhase, double BinaryAmp, double BinaryOmega, double Ecc, double M2, double OMDot, double SINI, double Gamma, double PBDot, double SqEcc_th, double Ecc_r, double arr, double ar, double phase,  double period, double width, double blin, double pepoch){
+		   extern "C" __global__ void addInterpGRBinary(double *a, double *orig, double *InterpCosBinary, double *InterpSinBinary, double *InterpTrueAnomaly, double BinaryPeriod, double BinaryPhase, double BinaryAmp, double BinaryOmega, double Ecc, double M2, double OMDot, double SINI, double Gamma, double PBDot, double SqEcc_th, double Ecc_r, double arr, double ar, double phase,  double period, double width, double blin, double pepoch){
 
 
 
@@ -215,7 +226,7 @@ class Search(object):
 
 		}
 
-		    __global__ void AddInterpCircBinary2(double *a, double *orig, double *InterpCosBinary, double *InterpSinBinary, double BinaryPeriod, double BinaryCosAmp, double BinarySinAmp, double blin, double pepoch)
+		    extern "C" __global__ void AddInterpCircBinary2(double *a, double *orig, double *InterpCosBinary, double *InterpSinBinary, double BinaryPeriod, double BinaryCosAmp, double BinarySinAmp, double blin, double pepoch)
 		  {
 			const int i = blockDim.x*blockIdx.x + threadIdx.x;
 			
@@ -232,7 +243,7 @@ class Search(object):
 		       
 		   }
 
-		    __global__ void AddCircBinary(double *a, double *orig, double BinaryAmp, double BinaryPeriod, double BinaryPhase, double phase, double blin, double pepoch)
+		    extern "C" __global__ void AddCircBinary(double *a, double *orig, double BinaryAmp, double BinaryPeriod, double BinaryPhase, double phase, double blin, double pepoch)
 		  {
 			const int i = blockDim.x*blockIdx.x + threadIdx.x;
 
@@ -241,7 +252,7 @@ class Search(object):
 		   }
 
 
-		    __global__ void MakeSignal(double *a, double *orig, double period, double width, double phase)
+		    extern "C" __global__ void MakeSignal(double *a, double *orig, double period, double width, double phase)
 		  {
 			const int i = blockDim.x*blockIdx.x + threadIdx.x;
 
@@ -253,7 +264,7 @@ class Search(object):
 		     
 		   }
 
-		    __global__ void GetPhaseBins(double *a, double period)
+		    extern "C" __global__ void GetPhaseBins(double *a, double period)
 		  {
 			const int i = blockDim.x*blockIdx.x + threadIdx.x;
 
@@ -265,7 +276,7 @@ class Search(object):
 		     
 		   }
 
-		    __global__ void Scatter(double *real, double *imag, double TimeScale, double *samplefreqs)
+		    extern "C" __global__ void Scatter(double *real, double *imag, double TimeScale, double *samplefreqs)
 		  {
 			const int i = blockDim.x*blockIdx.x + threadIdx.x;
 
@@ -294,7 +305,7 @@ class Search(object):
         self.addInterpEccBinary = mod.get_function("AddInterpEccBinary")
         self.addInterpGRBinary = mod.get_function("addInterpGRBinary")
 
-        self.MultNoise = ElementwiseKernel(
+        self.MultNoise = cp.RawKernel(
             "pycuda::complex<double> *a, double *b",
             "a[i] = a[i]*b[i]",
             "MultNoise")
@@ -319,20 +330,21 @@ class Search(object):
         Scattering log10_s dlog10_s
         DM dm d_dm 
 
-        In each case the parameter and desired perior is given, so that parameter is searched over x +/- dx
+        In each case the parameter and desired prior is given, so that parameter is searched over x +/- dx
         '''
         self.Cand = Candidate.Candidate(filename)
 
         if (self.Cand.FitCircBinary == True):
-            self.CosOrbit = gpuarray.empty(
+            self.CosOrbit = cp.empty(
                 self.InterpBinarySteps+1, np.float64)
-            self.SinOrbit = gpuarray.empty(
+            self.SinOrbit = cp.empty(
                 self.InterpBinarySteps+1, np.float64)
 
             self.CPUCosOrbit, self.CPUSinOrbit = self.KeplersOrbit(0)
 
-            self.CosOrbit = gpuarray.to_gpu(np.float64(self.CPUCosOrbit))
-            self.SinOrbit = gpuarray.to_gpu(np.float64(self.CPUSinOrbit))
+            #self.CosOrbit = cp.asarray(np.float64(self.CPUCosOrbit))
+            self.CosOrbit = cp.asarray(np.float64(self.CPUCosOrbit))
+            self.SinOrbit = cp.asarray(np.float64(self.CPUSinOrbit))
 
         if (self.Cand.FitEccBinary == True):
 
@@ -365,13 +377,13 @@ class Search(object):
                 self.CPUCosOrbit.append(COrbit)
                 self.CPUSinOrbit.append(SOrbit)
 
-                self.CosOrbit.append(gpuarray.empty(
+                self.CosOrbit.append(cp.empty(
                     self.InterpBinarySteps+1, np.float64))
-                self.SinOrbit.append(gpuarray.empty(
+                self.SinOrbit.append(cp.empty(
                     self.InterpBinarySteps+1, np.float64))
-                self.CosOrbit[i] = gpuarray.to_gpu(
+                self.CosOrbit[i] = cp.asarray(
                     np.float64(self.CPUCosOrbit[i]))
-                self.SinOrbit[i] = gpuarray.to_gpu(
+                self.SinOrbit[i] = cp.asarray(
                     np.float64(self.CPUSinOrbit[i]))
 
         if (self.Cand.FitGRBinary == True or self.Cand.FitPKBinary == True):
@@ -410,14 +422,14 @@ class Search(object):
                 self.CPUCosOrbit.append(COrbit)
                 self.CPUSinOrbit.append(SOrbit)
 
-                self.CosOrbit.append(gpuarray.empty(
+                self.CosOrbit.append(cp.empty(
                     self.InterpBinarySteps+1, np.float64))
-                self.SinOrbit.append(gpuarray.empty(
+                self.SinOrbit.append(cp.empty(
                     self.InterpBinarySteps+1, np.float64))
 
-                self.CosOrbit[i] = gpuarray.to_gpu(
+                self.CosOrbit[i] = cp.asarray(
                     np.float64(self.CPUCosOrbit[i]))
-                self.SinOrbit[i] = gpuarray.to_gpu(
+                self.SinOrbit[i] = cp.asarray(
                     np.float64(self.CPUSinOrbit[i]))
 
                 # double sqr1me2 = sqrt(1-Ecc*Ecc);
@@ -433,9 +445,9 @@ class Search(object):
                 cae = (COrbit - Ecc)/(1.0 - Ecc*COrbit)
                 self.CPUTrueAnomaly.append(np.arctan2(sae, cae) % (2*np.pi))
 
-                self.TrueAnomaly.append(gpuarray.empty(
+                self.TrueAnomaly.append(cp.empty(
                     self.InterpBinarySteps+1, np.float64))
-                self.TrueAnomaly[i] = gpuarray.to_gpu(
+                self.TrueAnomaly[i] = cp.asarray(
                     np.float64(self.CPUTrueAnomaly[i]))
 
     def addDatFile(self, root, bary=True, powerofTwo=True, setRefMJD=None, FromPickle=False, doFFT=True):
@@ -739,8 +751,7 @@ class Search(object):
                 self.MakeSignal(self.DatFiles[i].gpu_pulsar_signal, self.DatFiles[i].gpu_time, period, width **
                                 2, phase, grid=(self.DatFiles[i].Tblocks, 1), block=(self.DatFiles[i].block_size, 1, 1))
 
-            fft.fft(self.DatFiles[i].gpu_pulsar_signal,
-                    self.DatFiles[i].gpu_pulsar_fft, self.DatFiles[i].Plan)
+            self.DatFiles[i].gpu_pulsar_fft = cp.fft.rfft(self.DatFiles[i].gpu_pulsar_signal)
 
             if (self.Cand.FitScatter == True):
                 ChanScale = (
@@ -753,13 +764,23 @@ class Search(object):
             self.MultNoise(
                 self.DatFiles[i].gpu_pulsar_fft[1:-1], self.DatFiles[i].Noise)
 
-            mcdot = cublas.cublasZdotc(h, self.DatFiles[i].FSamps, (
-                self.DatFiles[i].gpu_pulsar_fft[1:-1]).gpudata, 1, (self.DatFiles[i].gpu_pulsar_fft[1:-1]).gpudata, 1).real
 
-            norm = np.sqrt((mcdot)/2/self.DatFiles[i].FSamps)
+            # Compute the conjugate dot product for mcdot
+            mcdot = cp.dot(self.DatFiles[i].gpu_pulsar_fft[1:-1].conj(), self.DatFiles[i].gpu_pulsar_fft[1:-1]).real
 
-            cdot = cublas.cublasZdotc(h, self.DatFiles[i].FSamps, self.DatFiles[i].gpu_fft_data.gpudata, 1, (
-                self.DatFiles[i].gpu_pulsar_fft[1:-1]).gpudata, 1).real
+            # Calculate the norm
+            norm = cp.sqrt(mcdot / 2 / self.DatFiles[i].FSamps)
+
+            # Compute the conjugate dot product for cdot
+            cdot = cp.dot(self.DatFiles[i].gpu_fft_data.conj(), self.DatFiles[i].gpu_pulsar_fft[1:-1]).real
+
+            #mcdot = cublas.cublasZdotc(h, self.DatFiles[i].FSamps, (
+#                self.DatFiles[i].gpu_pulsar_fft[1:-1]).gpudata, 1, (self.DatFiles[i].gpu_pulsar_fft[1:-1]).gpudata, 1).real
+
+            #norm = np.sqrt((mcdot)/2/self.DatFiles[i].FSamps)
+
+            #cdot = cublas.cublasZdotc(h, self.DatFiles[i].FSamps, self.DatFiles[i].gpu_fft_data.gpudata, 1, (
+#                self.DatFiles[i].gpu_pulsar_fft[1:-1]).gpudata, 1).real
 
             MLAmp = cdot/mcdot
             MarginLike = MLAmp*cdot
@@ -832,8 +853,9 @@ class Search(object):
             np.savetxt("realsig.dat", list(
                 zip(np.arange(0, 10000), s[:10000])))
 
-            fft.fft(self.DatFiles[i].gpu_pulsar_signal,
-                    self.DatFiles[i].gpu_pulsar_fft, self.DatFiles[i].Plan)
+
+            self.DatFiles[i].gpu_pulsar_fft = cp.fft.rfft(self.DatFiles[i].gpu_pulsar_signal)
+            
             ranPhases = np.random.uniform(
                 0, 1, len(self.DatFiles[i].gpu_pulsar_fft))
             CompRan = np.cos(2*np.pi*ranPhases) + 1j*np.sin(2*np.pi*ranPhases)
@@ -870,6 +892,11 @@ class Search(object):
         self.doplot = True
         self.gaussGPULike(self.ML)
         self.doplot = False
+        print(self.Cand.params)
+        print(self.post.shape)
+        #figure = corner.corner((self.post.T[:self.Cand.n_params]).T, labels=self.Cand.params,quantiles=[0.16, 0.5, 0.84],
+				       #show_titles=True, title_kwargs={"fontsize": 12})
+        #figure.savefig("test.png")
 
         '''
 		figure = corner.corner((self.post.T[:self.Cand.n_params]).T, labels=self.Cand.params,

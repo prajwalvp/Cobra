@@ -717,8 +717,10 @@ class Search(object):
                 Alpha = np.float64(BinaryAmp*SinOmega)
                 Beta = np.float64(BinaryAmp*np.sqrt(1 - Ecc*Ecc)*CosOmega)
 
-                self.addInterpEccBinary(self.DatFiles[i].gpu_pulsar_signal,  self.DatFiles[i].gpu_time, self.CosOrbit[EccBin], self.SinOrbit[EccBin], BinaryPeriod, BinaryPhase, BinaryAmp,
-                                        CosOmega, SinOmega, Ecc, phase,  period, width**2, BinaryAmp*blin, Alpha, Beta, grid=(self.DatFiles[i].Tblocks, 1), block=(self.DatFiles[i].block_size, 1, 1))
+              
+                self.addInterpEccBinary((self.DatFiles[i].Tblocks, 1), (self.DatFiles[i].block_size, 1, 1),
+                        (self.DatFiles[i].gpu_pulsar_signal,  self.DatFiles[i].gpu_time, self.CosOrbit[EccBin], self.SinOrbit[EccBin], BinaryPeriod, BinaryPhase, BinaryAmp,
+                                        CosOmega, SinOmega, Ecc, phase,  period, width**2, BinaryAmp*blin, Alpha, Beta))
 
             elif (self.Cand.FitGRBinary == True or self.Cand.FitPKBinary == True):
 
@@ -730,8 +732,9 @@ class Search(object):
 
                 # print "GR parameters: ", OMDot, SINI, Gamma, PBDot, DTheta, Dr
 
-                self.addInterpGRBinary(self.DatFiles[i].gpu_pulsar_signal,  self.DatFiles[i].gpu_time, self.CosOrbit[EccBin], self.SinOrbit[EccBin], self.TrueAnomaly[EccBin], BinaryPeriod, BinaryPhase, BinaryAmp, Omega,
-                                       Ecc, M2, OMDot, SINI, Gamma, PBDot, SqEcc_th, Ecc_r, arr, ar, phase,  period, width**2, BinaryAmp*blin, self.pepoch, grid=(self.DatFiles[i].Tblocks, 1), block=(self.DatFiles[i].block_size, 1, 1))
+                self.addInterpGRBinary((self.DatFiles[i].Tblocks, 1), (self.DatFiles[i].block_size, 1, 1),
+                        (self.DatFiles[i].gpu_pulsar_signal,  self.DatFiles[i].gpu_time, self.CosOrbit[EccBin], self.SinOrbit[EccBin], self.TrueAnomaly[EccBin], BinaryPeriod, BinaryPhase, BinaryAmp, Omega, Ecc, M2, OMDot, SINI, Gamma, PBDot, SqEcc_th, Ecc_r, arr, ar, phase,  period, width**2, BinaryAmp*blin, self.pepoch))
+                        
 
             elif (self.Cand.FitCircBinary == True):
 
@@ -739,18 +742,25 @@ class Search(object):
                 Beta = np.float64(eta*BinaryAmp)
                 H2Beta = np.float64(0.5*Beta*Beta)
 
-                self.addInterpCircBinary(self.DatFiles[i].gpu_pulsar_signal,  self.DatFiles[i].gpu_time, self.CosOrbit, self.SinOrbit, BinaryPeriod, BinaryPhase, BinaryAmp,
-                                         phase,  period, width**2, BinaryAmp*blin,  eta, Beta, H2Beta, grid=(self.DatFiles[i].Tblocks, 1), block=(self.DatFiles[i].block_size, 1, 1))
+                self.addInterpCircBinary((self.DatFiles[i].Tblocks, 1), (self.DatFiles[i].block_size, 1, 1),
+                        (self.DatFiles[i].gpu_pulsar_signal,  self.DatFiles[i].gpu_time, self.CosOrbit, self.SinOrbit, BinaryPeriod, BinaryPhase, BinaryAmp, phase,  period, width**2, BinaryAmp*blin,  eta, Beta, H2Beta))
+                                         
+
+
+
 
             elif (self.Cand.FitAcceleration == True):
 
-                self.AddAcceleration(self.DatFiles[i].gpu_pulsar_signal,  self.DatFiles[i].gpu_time, Acceleration, period,
-                                     phase, width**2,  grid=(self.DatFiles[i].Tblocks, 1), block=(self.DatFiles[i].block_size, 1, 1))
+                self.AddAcceleration((self.DatFiles[i].Tblocks, 1), (self.DatFiles[i].block_size, 1, 1),
+                        (self.DatFiles[i].gpu_pulsar_signal,  self.DatFiles[i].gpu_time, Acceleration, period,
+                                     phase, width**2))  
 
             else:
-
-                self.MakeSignal(self.DatFiles[i].gpu_pulsar_signal, self.DatFiles[i].gpu_time, period, width **
-                                2, phase, grid=(self.DatFiles[i].Tblocks, 1), block=(self.DatFiles[i].block_size, 1, 1))
+                self.MakeSignal((self.DatFiles[i].Tblocks, 1), (self.DatFiles[i].block_size, 1, 1), (self.DatFiles[i].gpu_pulsar_signal, 
+                                                                                                     self.DatFiles[i].gpu_time, 
+                                                                                                     period, 
+                                                                                                     width**2, 
+                                                                                                     phase))
 
             self.DatFiles[i].gpu_pulsar_fft = cp.fft.rfft(self.DatFiles[i].gpu_pulsar_signal)
 
@@ -759,9 +769,7 @@ class Search(object):
                     (self.DatFiles[i].LowChan*10.0**6)**4)/(10.0**(9.0*4.0))
 
                 tau = (10.0**x[3])/ChanScale
-                self.Scatter(rsig, isig, tau, self.DatFiles[i].SampleFreqs, grid=(
-                    self.DatFiles[i].Fblocks, 1), block=(self.block_size, 1, 1))
-
+                self.Scatter((self.DatFiles[i].Fblocks, 1), (self.block_size, 1, 1), (rsig, isig, tau, self.DatFiles[i].SampleFreqs)) 
             output_array = cp.empty_like(self.DatFiles[i].gpu_pulsar_fft[1:-1])    
             self.MultNoise(
                 self.DatFiles[i].gpu_pulsar_fft[1:-1], self.DatFiles[i].Noise, output_array)
@@ -776,14 +784,6 @@ class Search(object):
 
             # Compute the conjugate dot product for cdot
             cdot = cp.dot(self.DatFiles[i].gpu_fft_data.conj(), self.DatFiles[i].gpu_pulsar_fft[1:-1]).real
-
-            #mcdot = cublas.cublasZdotc(h, self.DatFiles[i].FSamps, (
-#                self.DatFiles[i].gpu_pulsar_fft[1:-1]).gpudata, 1, (self.DatFiles[i].gpu_pulsar_fft[1:-1]).gpudata, 1).real
-
-            #norm = np.sqrt((mcdot)/2/self.DatFiles[i].FSamps)
-
-            #cdot = cublas.cublasZdotc(h, self.DatFiles[i].FSamps, self.DatFiles[i].gpu_fft_data.gpudata, 1, (
-#                self.DatFiles[i].gpu_pulsar_fft[1:-1]).gpudata, 1).real
 
             MLAmp = cdot/mcdot
             MarginLike = MLAmp*cdot
@@ -849,8 +849,12 @@ class Search(object):
 
         for i in range(len(self.DatFiles)):
             self.DatFiles[i].gpu_pulsar_signal = self.DatFiles[i].gpu_time - 0*period
-            self.MakeSignal(self.DatFiles[i].gpu_pulsar_signal, period, ((
-                period*width)**2), grid=(self.DatFiles[i].Tblocks, 1), block=(self.DatFiles[i].block_size, 1, 1))
+            #self.MakeSignal(self.DatFiles[i].gpu_pulsar_signal, period, ((
+            #    period*width)**2), grid=(self.DatFiles[i].Tblocks, 1), block=(self.DatFiles[i].block_size, 1, 1))
+            self.MakeSignal(
+                    (self.DatFiles[i].Tblocks, 1), (self.DatFiles[i].block_size, 1, 1),
+                    (self.DatFiles[i].gpu_pulsar_signal, period, ((period*width)**2)) 
+                    )
 
             s = self.DatFiles[i].gpu_pulsar_signal.get()
             np.savetxt("realsig.dat", list(

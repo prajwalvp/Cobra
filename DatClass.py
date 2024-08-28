@@ -5,20 +5,7 @@ import numpy as np
 import os
 import pickle
 
-#Cupy
 import cupy as cp
-from cupyx.scipy.fft import get_fft_plan
-
-
-#pycuda
-#import pycuda.autoinit
-#import pycuda.gpuarray as gpuarray
-#from pycuda.compiler import SourceModule
-#import pycuda.cumath as cumath
-#from pycuda.elementwise import ElementwiseKernel
-#import pycuda.driver as drv
-#import skcuda.fft as fft
-#import skcuda.linalg as cula
 
 
 class DatFile(object):
@@ -116,16 +103,6 @@ class DatFile(object):
             gpu_Data = cp.asarray(self.Data, dtype=cp.float64)
             self.gpu_fft_data = cp.fft.rfft(gpu_Data)
             self.gpu_fft_data = self.gpu_fft_data[1:-1]
-
-            #self.gpu_fft_data = cp.zeros(self.NSamps//2+1, np.complex128)
-
-            #self.Plan = fft.Plan(self.NSamps, np.float64, np.complex128)
-            #self.Plan = get_fft_plan(self.NSamps, np.float64, np.complex128)
-            #fft.fft(gpu_Data, self.gpu_fft_data, self.Plan)
-            #self.gpu_fft_data = self.gpu_fft_data[1:-1]
-
-            #gpu_Data.gpudata.free()
-
             self.FSamps = len(self.gpu_fft_data)
 
             self.CalcNoise(cut=False, mode=1)
@@ -264,8 +241,6 @@ class DatFile(object):
                 print("bad", NRbad, NIbad)
                 self.gpu_fft_data = cp.asarray(fftdata, dtype=cp.complex128)
         if (mode == 1):
-            # r2 = cula.dot(self.Real[self.FSamps/2:], self.Real[self.FSamps/2:])
-            # i2   = cula.dot(self.Imag[self.FSamps/2:], self.Imag[self.FSamps/2:])
             fftD = self.gpu_fft_data.get()
             r2 = np.dot(fftD.real[self.FSamps//2:], fftD.real[self.FSamps//2:])
             i2 = np.dot(fftD.imag[self.FSamps//2:], fftD.imag[self.FSamps//2:])

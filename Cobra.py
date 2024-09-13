@@ -1,6 +1,7 @@
 import File
 import Candidate
 import DatClass
+import time
 
 import pymultinest
 import numpy as np
@@ -102,17 +103,18 @@ class Search(object):
                 Period  P fP
 
         Where P is the candidate period, and fP is the fractional error.
-
+        
+        Note that this is only for P. Any additional parameters need the 
+        lower and upper limits of the prior as an input
+ 
         Optional lines are:
 
         Phase  ph  d_ph
         Width log10_w dlog10_w
-        Acceleration  a d_a
-        CircBinary log10_bp dlog10_bp log10_ba log10d_ba
-        Scattering log10_s dlog10_s
-        DM dm d_dm 
-
-        In each case the parameter and desired prior is given, so that parameter is searched over x +/- dx
+        Acceleration  min_a max_a
+        CircBinary min_log10_bp max_log10_bp min_log10_ba max_log10d_ba 
+        Scattering min_log10_s max_log10_s
+        DM min_dm max_dm  
         '''
         self.Cand = Candidate.Candidate(filename)
 
@@ -232,7 +234,7 @@ class Search(object):
                 self.TrueAnomaly[i] = cp.asarray(
                     np.float64(self.CPUTrueAnomaly[i]))
 
-    def addDatFile(self, root, bary=True, powerofTwo=True, setRefMJD=None, FromPickle=False, doFFT=True):
+    def addDatFile(self, root, bary=False, powerofTwo=True, setRefMJD=None, FromPickle=False, doFFT=True):
         '''
         Add dat file to the search with root 'root'.  Requires root.dat and root.inf to be present in directory
         bary - perform barycentering using Tempo2 to scale the time axis for the model (default = True)
@@ -559,13 +561,14 @@ class Search(object):
 
             # Compute the conjugate dot product for mcdot
             mcdot = cp.dot(self.DatFiles[i].gpu_pulsar_fft[1:-1].conj(), self.DatFiles[i].gpu_pulsar_fft[1:-1]).real
+            #print(mcdot)
 
             # Calculate the norm
             norm = cp.sqrt(mcdot / 2 / self.DatFiles[i].FSamps)
 
             # Compute the conjugate dot product for cdot
             cdot = cp.dot(self.DatFiles[i].gpu_fft_data.conj(), self.DatFiles[i].gpu_pulsar_fft[1:-1]).real
-
+            #print(cdot)
             MLAmp = cdot/mcdot
             MarginLike = MLAmp*cdot
             logdetMNM = np.log(mcdot) - 2*np.log(norm)
@@ -663,7 +666,11 @@ class Search(object):
         x = np.zeros(nparams)
         for i in range(ndim):
             x[i] = cube[i]
+        
+        start = time.time()
         like, dp = self.gaussGPULike(x)
+        end = time.time()
+       # print("Likelihood evaluation time: {} s".format(end - start))
 
         for i in range(ndim, nparams):
             cube[i] = dp[i]
@@ -706,7 +713,7 @@ class Search(object):
 
         if (sample == True):
             pymultinest.run(self.GaussGPULikeWrap, self.MNprior, self.Cand.n_dims, n_params=self.Cand.n_params, importance_nested_sampling=False, resume=resume, verbose=True,
-                            sampling_efficiency=efr, multimodal=False, const_efficiency_mode=ceff, n_live_points=nlive, outputfiles_basename=self.ChainRoot, wrapped_params=self.Cand.wrapped)
+                            sampling_efficiency=efr, multimodal=False, const_efficiency_mode=ceff, n_live_points=nlive, init_MPI=True, outputfiles_basename=self.ChainRoot, wrapped_params=self.Cand.wrapped)
 
         self.loadChains()
         if (doplot == True):

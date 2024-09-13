@@ -10,7 +10,7 @@ import cupy as cp
 
 class DatFile(object):
 
-    def __init__(self, root, subTime, bary=True, powerofTwo=True, FromPickle=False, doFFT=True):
+    def __init__(self, root, subTime, bary=False, powerofTwo=True, FromPickle=False, doFFT=True):
 
         self.root = root
         self.subTime = subTime

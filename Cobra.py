@@ -248,6 +248,7 @@ class Search(object):
             self.DatFiles.append(DatClass.DatFile(
                 root, RefMJD, bary, powerofTwo, FromPickle, doFFT))
             self.pepoch = self.DatFiles[0].pepoch
+            #print("First Pepoch setting:", self.pepoch)
             self.length = self.DatFiles[0].BaseTime[-1] - \
                 self.DatFiles[0].BaseTime[0]
         else:
@@ -257,8 +258,10 @@ class Search(object):
                 RefMJD = setRefMJD
             self.DatFiles.append(DatClass.DatFile(
                 root, RefMJD, bary, powerofTwo, FromPickle, doFFT))
+            #print("Pepoch before:", self.pepoch)
             self.pepoch = ((len(self.DatFiles) - 1)*self.pepoch +
                            self.DatFiles[-1].pepoch)/len(self.DatFiles)
+            #print("Pepoch after:", self.pepoch)
             self.length = self.DatFiles[-1].BaseTime[-1] - \
                 self.DatFiles[0].BaseTime[0]
             print('RefMJD:', self.DatFiles[0].RefMJD, self.DatFiles[-1].RefMJD)
@@ -329,7 +332,7 @@ class Search(object):
             # period += BinaryAmp*blin*period
             # print bsum, blin, bstd
             x[6] = phase % 1
-            x[7] = period+BinaryAmp*blin*period
+            x[7] = period - BinaryAmp*blin*period
             x[8] = BinaryAmp
             x[9] = BinaryPhase % 1
             x[10] = BinaryPeriod/24/60/60
@@ -670,7 +673,7 @@ class Search(object):
         start = time.time()
         like, dp = self.gaussGPULike(x)
         end = time.time()
-       # print("Likelihood evaluation time: {} s".format(end - start))
+        #print("Likelihood evaluation time: {} s".format(end - start))
 
         for i in range(ndim, nparams):
             cube[i] = dp[i]
@@ -778,6 +781,7 @@ class Search(object):
 
         bstd = np.sqrt(bstd/totsamps)
 
+        #print("bstd:", bstd) 
         return bsum, lin, bstd
 
     def EccSum(self, Orbit, Period, BinaryPhase, interpstep):

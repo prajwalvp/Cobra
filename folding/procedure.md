@@ -19,17 +19,17 @@ Dim No.        Parameter
 ```
 The above parameters reads as:
 
-1. Phase (0-1)
-2. log\_10 Width 
-3. Spin period (s)
-4. log\_10 projected semi major axis(log10x; lt-s)
-5. Binary phase ($\psi_{2\pi}$; between 0 to 2*pi)
-6. log10 binary period (log10$P_b$; days)
-7. Phase (0-1)
-8. Spin period corrected (p\_corr; s)
-9. Projected semi-major axis (x; lt-s)
-10. Binary phase (between 0 and 1)
-11. Binary period ($P\_b$; days) 
+1. Rotational Phase ($\phi$; Ranging from 0-1)
+2. Pulse Width ($W_{log_{10}}$) 
+3. Spin period ($P$; s)
+4. log\_10 projected semi major axis($x_{log_{10}}$; lt-s)
+5. Binary phase ($\psi_{2\pi}$; between 0 to 2$\pi$)
+6. log10 binary period (log $P_b$; days)
+7. Rotational Phase corrected ($\phi_{corr}$; 0-1)
+8. Spin period corrected ($P\_{corr}$; s)
+9. Projected semi-major axis ($x$; lt-s)
+10. Binary phase ($\psi$; between 0 and 1)
+11. Binary period ($P_b$; days) 
 
 
 To calculate T0:
@@ -37,11 +37,13 @@ To calculate T0:
 
 Use RefMJD of the first dedispersed time series file and apply the following
 
-T0\_corrected = T0\_ref - ($\psi_{2\pi}$/(2*pi))*P_b
-
+```
+T0\_corrected = T0\_ref - $\frac{\psi_{2\pi}}{2\pi}$ * P_b$
+```
 
 apply the following convention when folding with prepfold:
 
-
-prepfold -p p\_corr -bin -pb $P_b$*86400 -x x -To T0_corrected *.fil  
+```
+prepfold -p $P_corr$ -bin -pb $P_b$ * 86400 -x $x$ -To T0\_corrected *.fil  
+```
 

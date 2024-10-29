@@ -17,33 +17,37 @@ Dim No.        Parameter
   10    0.585074928875855660E+00
   11    0.202965216724130870E+00
 ```
-The above parameters reads as:
 
-1. Rotational Phase ($\phi$; Ranging from 0-1)
-2. Pulse Width ($W_{log_{10}}$) 
-3. Spin period ($P$; s)
-4. log\_10 projected semi major axis($x_{log_{10}}$; lt-s)
-5. Binary phase ($\psi_{2\pi}$; between 0 to 2$\pi$)
-6. log10 binary period (log $P_b$; days)
-7. Rotational Phase corrected ($\phi_{corr}$; 0-1)
-8. Spin period corrected ($P\_{corr}$; s)
-9. Projected semi-major axis ($x$; lt-s)
+
+The above parameters correspond to:
+
+1. Rotational Phase ($\phi$; ranging from 0 to 1)
+2. Pulse Width ($W_{\log_{10}}$)
+3. Spin Period ($P$; seconds)
+4. $\log_{10}$ of the projected semi-major axis ($x_{\log_{10}}$; light-seconds)
+5. Binary phase ($\psi_{2\pi}$; between 0 and $2\pi$)
+6. $\log_{10}$ of the binary period ($P_b$; days)
+7. Corrected Rotational Phase ($\phi_{\text{corr}}$; 0 to 1)
+8. Corrected Spin Period ($P_{\text{corr}}$; seconds)
+9. Projected semi-major axis ($x$; light-seconds)
 10. Binary phase ($\psi$; between 0 and 1)
-11. Binary period ($P_b$; days) 
+11. Binary period ($P_b$; days)
+
+### To calculate $T_0$:
+
+Use the reference MJD of the first dedispersed time series file and apply the following formula:
+
+```latex
+T_0^{\text{corrected}} = T_0^{\text{ref}} - \left(\frac{\psi_{2\pi}}{2\pi}\right) \cdot P_b
 
 
-To calculate T0:
 
 
-Use RefMJD of the first dedispersed time series file and apply the following
+
+Apply the following convention when folding with prepfold:
 
 ```
-T0\_corrected = T0\_ref - $\frac{\psi_{2\pi}}{2\pi}$ * P_b$
+prepfold -p $P_{\text{corr}} -bin -pb $P_b * 86400 -x $x -To $T_0^{\text{corrected}} *.fil  
 ```
 
-apply the following convention when folding with prepfold:
-
-```
-prepfold -p $P_corr$ -bin -pb $P_b$ * 86400 -x $x$ -To T0\_corrected *.fil  
-```
 

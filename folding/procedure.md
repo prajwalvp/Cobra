@@ -26,7 +26,7 @@ The above parameters correspond to:
 3. Spin Period ($P$; seconds)
 4. $\log_{10}$ of the projected semi-major axis ($x_{\log_{10}}$; light-seconds)
 5. Binary phase ($\psi_{2\pi}$; between 0 and $2\pi$)
-6. $\log_{10}$ of the binary period ($P_b$; days)
+6. $\log_{10}$ of the binary period ($P_b$(days); days)
 7. Corrected Rotational Phase ($\phi_{\text{corr}}$; 0 to 1)
 8. Corrected Spin Period ($P_{\text{corr}}$; seconds)
 9. Projected semi-major axis ($x$; light-seconds)
@@ -37,17 +37,18 @@ The above parameters correspond to:
 
 Use the reference MJD of the first dedispersed time series file and apply the following formula:
 
-```latex
-T_0^{\text{corrected}} = T_0^{\text{ref}} - \left(\frac{\psi_{2\pi}}{2\pi}\right) \cdot P_b
 
+$T_0^{\text{corrected}} = T_0^{\text{ref}} - \left(\frac{\psi_{2\pi}}{2\pi}\right) \cdot P_b$
 
+### To calculate $P_b$:
 
+$P_b$ = $P_b$(days) * 86400
 
 
 Apply the following convention when folding with prepfold:
 
-```
-prepfold -p $P_{\text{corr}} -bin -pb $P_b * 86400 -x $x -To $T_0^{\text{corrected}} *.fil  
-```
+
+prepfold  -p $P_{\text{corr}}$  -bin  -pb  $P_b$  -x  $x$  -To   $T_0^{\text{corrected}}$  \<time ordered filterbanks\> 
+
 
 

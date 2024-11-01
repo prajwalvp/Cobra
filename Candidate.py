@@ -55,8 +55,10 @@ class Candidate(object):
                 line = cfile[i].strip('\n').split()
                 self.period = np.float64(line[-2])
                 prange = np.float64(line[-1])
-                self.pmin.append(self.period*(1.0 - prange))
-                self.pmax.append(self.period*(1.0 + prange))
+                #self.pmin.append(self.period*(1 - prange))
+                #self.pmax.append(self.period*(1 + prange))
+                self.pmin.append(self.period  - prange)
+                self.pmax.append(self.period  + prange)
                 self.wrapped.append(0)
 
             if ('DM' in cfile[i]):

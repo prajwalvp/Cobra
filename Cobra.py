@@ -234,7 +234,7 @@ class Search(object):
                 self.TrueAnomaly[i] = cp.asarray(
                     np.float64(self.CPUTrueAnomaly[i]))
 
-    def addDatFile(self, root, bary=False, powerofTwo=True, setRefMJD=None, FromPickle=False, doFFT=True):
+    def addDatFile(self, root, bary=False, powerofTwo=False, bestprimeLength=True, setRefMJD=None, FromPickle=False, doFFT=True):
         '''
         Add dat file to the search with root 'root'.  Requires root.dat and root.inf to be present in directory
         bary - perform barycentering using Tempo2 to scale the time axis for the model (default = True)
@@ -246,9 +246,9 @@ class Search(object):
                 print("setting ref:", setRefMJD)
                 RefMJD = setRefMJD
             self.DatFiles.append(DatClass.DatFile(
-                root, RefMJD, bary, powerofTwo, FromPickle, doFFT))
+                root, RefMJD, bary, powerofTwo, bestprimeLength, FromPickle, doFFT))
             self.pepoch = self.DatFiles[0].pepoch
-            #print("First Pepoch setting:", self.pepoch)
+            print("First Pepoch setting:", self.pepoch)
             self.length = self.DatFiles[0].BaseTime[-1] - \
                 self.DatFiles[0].BaseTime[0]
         else:
@@ -257,11 +257,11 @@ class Search(object):
                 print("setting ref:", setRefMJD)
                 RefMJD = setRefMJD
             self.DatFiles.append(DatClass.DatFile(
-                root, RefMJD, bary, powerofTwo, FromPickle, doFFT))
-            #print("Pepoch before:", self.pepoch)
+                root, RefMJD, bary, powerofTwo, bestprimeLength, FromPickle, doFFT))
+            print("Pepoch before:", self.pepoch)
             self.pepoch = ((len(self.DatFiles) - 1)*self.pepoch +
                            self.DatFiles[-1].pepoch)/len(self.DatFiles)
-            #print("Pepoch after:", self.pepoch)
+            print("Pepoch after:", self.pepoch)
             self.length = self.DatFiles[-1].BaseTime[-1] - \
                 self.DatFiles[0].BaseTime[0]
             print('RefMJD:', self.DatFiles[0].RefMJD, self.DatFiles[-1].RefMJD)

@@ -10,12 +10,13 @@ import cupy as cp
 
 class DatFile(object):
 
-    def __init__(self, root, subTime, bary=False, powerofTwo=True, FromPickle=False, doFFT=True):
+    def __init__(self, root, subTime, bary=False, powerofTwo=False, bestprimeLength=True, FromPickle=False, doFFT=True):
 
         self.root = root
         self.subTime = subTime
         self.doBary = bary
         self.powerofTwo = powerofTwo
+        self.bestprimeLength = bestprimeLength
         self.FromPickle = FromPickle
         self.doFFT = doFFT
 
@@ -67,6 +68,40 @@ class DatFile(object):
                 power = i
         return power
 
+
+    def getbestprimeLength(self, length):
+        def generate_candidates(limit):
+            candidates = set()
+
+            #Try powers of 2
+            for a in range(0, 30):
+                num = 2 ** a
+                if num >=limit:
+                    break
+                candidates.add(num)
+                
+                #Try powers of 2 multipled by powers of 3
+                for b in range(0,3): #Powers of 3 (0,1, or 2 times)
+                    num_with_3 = num * (3**b)
+                    if num_with_3 >=limit:
+                        break
+                    candidates.add(num_with_3)
+
+                
+                    # Try powers of 2 multiplied by powers of 3 and powers of 5
+                    for c in range(0,3):
+                        num_with_5 = num_with_3 * (5**c)
+                        if num_with_5 < limit:
+                            candidates.add(num_with_5)
+                        else:
+                            break
+            return candidates
+
+        candidates = generate_candidates(length)
+        return max(candidates)
+
+
+
     def setupDat(self):
 
         if (self.FromPickle == False):
@@ -79,11 +114,19 @@ class DatFile(object):
 
         if (self.powerofTwo == True):
             p2 = self.getpowerofTwo(len(self.Data))
+            print(p2)
             powerof2cut = (len(self.Data) - 2**p2)//2
+            print(powerof2cut)
             print("Using the first ", 100.0*(len(self.Data)-2*powerof2cut)/(len(self.Data)*1.0),
                   "% of data (", len(self.Data)-2*powerof2cut, " of ", len(self.Data), ") to get a power of 2")
             if (powerof2cut > 0):
                 self.Data = self.Data[:-2*powerof2cut]
+        
+        if (self.bestprimeLength == True):
+            best_length = self.getbestprimeLength(len(self.Data))
+            print("Using the first {} out of {} samples: {} % of data".format(best_length, len(self.Data), 100*(best_length/(len(self.Data)))))
+            self.Data = self.Data[:best_length]
+            
         self.Data = self.Data-np.mean(self.Data)
         self.parseInf()
         if (self.doBary == True):

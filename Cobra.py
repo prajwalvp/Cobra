@@ -2,13 +2,16 @@ import File
 import Candidate
 import DatClass
 import time
+import logging
 
 import pymultinest
+import emcee
+import corner
+
 import numpy as np
 import pylab as la
 import matplotlib.pyplot as plt
 import numpy as np
-import corner
 import scipy.interpolate as interp
 from scipy.optimize import fmin
 import importlib.resources
@@ -20,10 +23,9 @@ class Search(object):
 
     def __init__(self):
         '''
-        Typical usecase Scenario for Cobra:
-
+        Typical use case Scenario for Cobra:
         MySearch = Cobra.Search()
-        MySearch.addDatFile('FileRoot', bary = True) #bary = True is the default
+        MySearch.addDatFile('FileRoot', bary = False) #bary = False is the default
         MySearch.addCandidate('CandidateFile')
         MySearch.sample()
         '''
@@ -92,7 +94,6 @@ class Search(object):
             "complex128 c",
             "c = a*b",
             "MultNoise")
-        # self.MultNoise = mod.get_function("MultNoise")
 
     def addCandidate(self, filename):
         '''
@@ -301,7 +302,7 @@ class Search(object):
             # phase += (asum - alin*self.pepoch)/period
             period += alin*period
 
-            x[pcount] = phase % 1
+            x[pcount] = phase % 1 
             x[pcount+1] = period
             x[pcount+2] = Acceleration
 
@@ -331,7 +332,7 @@ class Search(object):
 
             # period += BinaryAmp*blin*period
             # print bsum, blin, bstd
-            x[6] = phase % 1
+            x[6] = phase % 1 - 0.5
             x[7] = period - BinaryAmp*blin*period
             x[8] = BinaryAmp
             x[9] = BinaryPhase % 1
@@ -673,12 +674,59 @@ class Search(object):
         start = time.time()
         like, dp = self.gaussGPULike(x)
         end = time.time()
-        #print("Likelihood evaluation time: {} s".format(end - start))
 
+
+        #print("Likelihood evaluation time: {} s".format(end - start))
+        #print(like)
         for i in range(ndim, nparams):
             cube[i] = dp[i]
 
         return like
+
+    def log_probability(self, params):
+        """
+        Log-probability function combining prior and likelihood for emcee, with conditional parameter wrapping.
+    
+        Parameters:
+            params (array): Parameter values for the current sample.
+    
+        Returns:
+            float: The log-probability (log-prior + log-likelihood) if valid, else -np.inf.
+        """
+
+        # Calculate derived parameters which won't be sampled
+        #derived_params = calculate_derived_parameters(params)
+
+
+        # Transform params with wrapping and prior ranges
+        transformed_params = np.array([
+        (self.Cand.pmax[i] - self.Cand.pmin[i]) * (
+            (params[i] % (2 * np.pi)) if i == 4 else
+            (params[i] % 1) if i == 0 else
+            params[i]
+        ) + self.Cand.pmin[i]
+        for i in range(self.Cand.n_dims)
+        ])
+ 
+        # Calculate log-prior
+        log_prior = 0.0
+        for i in range(self.Cand.n_dims):
+            if not (self.Cand.pmin[i] <= transformed_params[i] <= self.Cand.pmax[i]):
+                return -np.inf  # Return -inf if outside prior bounds
+   
+
+
+        # Calculate log-likelihood
+        #log_likelihood, dp = self.gaussGPULike(transformed_params)
+        log_likelihood = self.gaussGPULike(transformed_params)
+        if log_likelihood == -np.inf:
+            return -np.inf  # Return -inf if likelihood is zero or negative
+    
+        # Combine log-prior and log-likelihood
+        #return log_prior + log_likelihood, derived_params
+        return float(log_prior) + float(log_likelihood)
+
+
 
     def loadChains(self):
         self.phys = np.loadtxt(self.ChainRoot+'phys_live.points')
@@ -690,18 +738,12 @@ class Search(object):
         self.doplot = True
         self.gaussGPULike(self.ML)
         self.doplot = False
-        print(self.Cand.params)
-        print(self.post.shape)
-        #figure = corner.corner((self.post.T[:self.Cand.n_params]).T, labels=self.Cand.params,quantiles=[0.16, 0.5, 0.84],
-				       #show_titles=True, title_kwargs={"fontsize": 12})
-        #figure.savefig("test.png")
-
-        '''
-		figure = corner.corner((self.post.T[:self.Cand.n_params]).T, labels=self.Cand.params,
-				       quantiles=[0.16, 0.5, 0.84],
+        #print(self.Cand.params)
+        #print(self.post.shape)
+        figure = corner.corner((self.post.T[:self.Cand.n_params]).T, labels=self.Cand.params,quantiles=[0.16, 0.5, 0.84],
 				       show_titles=True, title_kwargs={"fontsize": 12})
-		figure.show()
-		'''
+        figure.savefig("corner.png")
+
 
     def sample(self, nlive=500, ceff=False, efr=0.2, resume=False, doplot=False, sample=True):
         '''
@@ -715,12 +757,124 @@ class Search(object):
         '''
 
         if (sample == True):
-            pymultinest.run(self.GaussGPULikeWrap, self.MNprior, self.Cand.n_dims, n_params=self.Cand.n_params, importance_nested_sampling=False, resume=resume, verbose=True,
+            pymultinest.run(self.GaussGPULikeWrap, self.MNprior, self.Cand.n_dims, n_params=self.Cand.n_params, importance_nested_sampling=True, resume=resume, verbose=True,
                             sampling_efficiency=efr, multimodal=False, const_efficiency_mode=ceff, n_live_points=nlive, init_MPI=True, outputfiles_basename=self.ChainRoot, wrapped_params=self.Cand.wrapped)
 
         self.loadChains()
         if (doplot == True):
             self.plotResult()
+
+    def sample_emcee(self, nwalkers=32, nsteps=1000, resume=False, doplot=False, sample=True):
+        '''
+        Sampling function using emcee.
+
+        nwalkers - number of walkers (chains)
+        nsteps - number of steps each walker takes
+        resume - whether to resume (handle separately if needed)
+        doplot - make plots after sampling
+        '''
+        if sample:
+            # Define initial positions around some starting guess, e.g., zeros
+            initial_pos = np.random.rand(nwalkers, self.Cand.n_dims)  # Modify if a different initial position is desired
+
+            # Create sampler with log-probability function
+            sampler = emcee.EnsembleSampler(nwalkers, self.Cand.n_dims, self.log_probability)
+
+            # Run sampling
+            #sampler.run_mcmc(initial_pos, nsteps, progress=True)
+
+
+            # Assuming `sampler` is your initialized EnsembleSampler and `initial_state` is your starting position
+            max_steps = 10000  # Define a maximum number of steps
+            check_interval = 500  # Check for convergence every 500 steps
+            old_tau = np.inf
+
+            for sample in sampler.sample(initial_pos, iterations=max_steps, progress=True):
+                # Every `check_interval` steps, check convergence
+                if sampler.iteration % check_interval == 0:
+                    try:
+                        # Calculate the autocorrelation time
+                        tau = sampler.get_autocorr_time(tol=0)
+                        # Check if the chains have converged
+                        converged = np.all(tau * 50 < sampler.iteration)
+                        converged &= np.all(np.abs(old_tau - tau) / tau < 0.01)
+                        if converged:
+                            print(f"Chains have converged after {sampler.iteration} steps.")
+                            break
+                        old_tau = tau
+                    except emcee.autocorr.AutocorrError:
+                        print("Not enough samples yet to estimate tau reliably")
+                        pass
+
+            # Now retrieve the flattened samples, discarding burn-in samples
+            #samples = sampler.get_chain(discard=int(0.2 * sampler.iteration), flat=True)
+
+
+            # Access samples
+            #samples = sampler.get_chain(flat=True)  # Flatten chain if desired
+
+            # Optional: Plotting or post-processing as needed
+            #if doplot:
+                # Generate plots here, e.g., corner plot
+            #    pass
+
+            return sampler  # Or save samples if preferred 
+
+    def save_emcee_output(self, sampler, output_basename='test', burn_in=0, thin=1):
+        """
+        Save the main data products from an emcee run to files.
+        
+        Parameters:
+            sampler : emcee.EnsembleSampler
+                The emcee sampler after running MCMC.
+            output_basename : str
+                The base filename (directory or prefix) for saving outputs.
+            burn_in : int, optional
+                Number of initial samples to discard as burn-in.
+            thin : int, optional
+                Factor by which to thin the chain.
+        """
+        # Chain (samples) - save flattened and raw chains
+        flat_samples = sampler.get_chain(discard=burn_in, thin=thin, flat=True)
+        np.savetxt(f"{output_basename}_chain.txt", flat_samples)
+        
+        # Raw chain in full shape
+        raw_chain = sampler.get_chain()
+        np.save(f"{output_basename}_raw_chain.npy", raw_chain)
+
+        # Log probability - save flattened and raw log-probs
+        flat_log_prob = sampler.get_log_prob(discard=burn_in, thin=thin, flat=True)
+        np.savetxt(f"{output_basename}_log_prob.txt", flat_log_prob)
+
+        raw_log_prob = sampler.get_log_prob()
+        np.save(f"{output_basename}_raw_log_prob.npy", raw_log_prob)
+
+        # Acceptance fractions for each walker
+        acceptance_fraction = sampler.acceptance_fraction
+        np.savetxt(f"{output_basename}_acceptance_fraction.txt", acceptance_fraction)
+
+        # Autocorrelation time estimate (optional; will raise error if insufficient samples)
+        try:
+            autocorr_time = sampler.get_autocorr_time()
+            np.savetxt(f"{output_basename}_autocorr_time.txt", autocorr_time)
+        except emcee.autocorr.AutocorrError:
+            print("Warning: Chain too short to reliably estimate autocorrelation time.")
+            autocorr_time = None
+
+
+        # Retrieve the derived parameters
+        derived_params = sampler.get_blobs()
+        np.save(f"{output_basename}_derived_params.txt", derived_params)
+
+        print("Data products saved successfully.")
+        #return {
+        #    "flat_samples": flat_samples,
+        #    "raw_chain": raw_chain,
+        #    "flat_log_prob": flat_log_prob,
+        #    "raw_log_prob": raw_log_prob,
+        #    "acceptance_fraction": acceptance_fraction,
+        #    "autocorr_time": autocorr_time
+
 
     def AccSum(self, Acceleration):
 
@@ -782,6 +936,7 @@ class Search(object):
         bstd = np.sqrt(bstd/totsamps)
 
         #print("bstd:", bstd) 
+        #print("blin:", lin) 
         return bsum, lin, bstd
 
     def EccSum(self, Orbit, Period, BinaryPhase, interpstep):

@@ -19,8 +19,8 @@ class Candidate(object):
         self.FitScatter = False
         self.TestPoint = None
 
-        self.pmin = [0, -3]
-        self.pmax = [1, 0]
+        self.pmin = [-0.5, -3]
+        self.pmax = [0.5, 0]
         self.wrapped = [1, 0]
         self.params = []
         self.n_dims = None
@@ -108,6 +108,10 @@ class Candidate(object):
                 self.wrapped.append(0)
                 self.wrapped.append(1)
                 self.wrapped.append(0)
+
+                #print("Lower limit of all parameters: {}".format(self.pmin))
+                #print("Upper limit of all parameters: {}".format(self.pmax))
+
 
             if ('EccBinary' in cfile[i]):
 

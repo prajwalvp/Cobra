@@ -69,7 +69,7 @@ class DatFile(object):
         return power
 
 
-    def getbestprimeLength(self, length):
+    def getbestprimeLength(self, length, rank=1):
         def generate_candidates(limit):
             candidates = set()
 
@@ -98,7 +98,10 @@ class DatFile(object):
             return candidates
 
         candidates = generate_candidates(length)
-        return max(candidates)
+        if rank ==1:
+            return max(candidates)
+        else:
+            return sorted(list(candidates))[-1*rank]
 
 
 
@@ -123,7 +126,8 @@ class DatFile(object):
                 self.Data = self.Data[:-2*powerof2cut]
         
         if (self.bestprimeLength == True):
-            best_length = self.getbestprimeLength(len(self.Data))
+            #best_length = self.getbestprimeLength(len(self.Data))
+            best_length = self.getbestprimeLength(len(self.Data), 1)
             print("Using the first {} out of {} samples: {} % of data".format(best_length, len(self.Data), 100*(best_length/(len(self.Data)))))
             self.Data = self.Data[:best_length]
             
@@ -154,7 +158,7 @@ class DatFile(object):
             self.gpu_time = cp.asarray(self.BaseTime, dtype=cp.float64)
             self.gpu_pulsar_signal = cp.empty(self.NSamps, dtype=cp.float64)
             self.gpu_pulsar_fft = cp.empty(
-                self.NSamps//2+1, dtype=cp.complex128)
+                self.NSamps//2+1, dtype=cp.complex128) #Complex64?
 
             self.block_size = 128
             self.Tblocks = int(np.ceil(self.NSamps*1.0/self.block_size))

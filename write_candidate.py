@@ -126,7 +126,7 @@ def makeCandidate(input_files, param_file):
      
     with open("candidate.dat","w") as f:
         f.write("Period {} {}\n".format(P0_input, dP0_input))
-        f.write("CircBinary {} {} {} {}\n".format(A1_ip - dA1_input, A1_ip + dA1_input, PB_ip - dPb_input, PB_ip + dPb_input))
+        f.write("CircBinary {} {} {} {}\n".format(PB_ip - dPb_input, PB_ip + dPb_input, A1_ip - dA1_input, A1_ip + dA1_input))
 
     f.close()
 

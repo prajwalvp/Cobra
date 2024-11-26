@@ -49,6 +49,53 @@ AddInterpCircBinary(double *a, double *orig, double *InterpCosBinary,
 }
 
 extern "C" __global__ void
+AddInterpCircBinarySingle(float *a, float *orig, float *InterpCosBinary,
+                    float *InterpSinBinary, float BinaryPeriod,
+                    float BinaryPhase, float BinaryAmp, float phase,
+                    float period, float width, float blin, float eta,
+                    float etaB, float Heta2B) {
+  const int i = blockDim.x * blockIdx.x + threadIdx.x;
+
+  // Ensure BinaryPeriod is not zero to avoid division by zero.
+  if (BinaryPeriod == 0.0f) return;
+
+  float BPhase = orig[i] / BinaryPeriod + BinaryPhase;
+  BPhase = BPhase - truncf(BPhase);
+  BPhase = 10000.0f * ((BPhase + 1) - truncf((BPhase + 1)));
+
+  int LowBin = floorf(BPhase);
+  int HighBin = LowBin + 1;
+  
+  // Bounds check to avoid accessing out-of-bounds elements in the arrays
+  if (LowBin < 0 || HighBin >= 10000) return; // Adjust size limit as needed.
+
+  float BinaryCosSignal =
+      InterpCosBinary[LowBin] +
+      (InterpCosBinary[HighBin] - InterpCosBinary[LowBin]) * (BPhase - LowBin);
+  float BinarySinSignal =
+      InterpSinBinary[LowBin] +
+      (InterpSinBinary[HighBin] - InterpSinBinary[LowBin]) * (BPhase - LowBin);
+
+  float BinarySignal =
+      BinaryAmp * BinarySinSignal *
+      (1 - etaB * BinaryCosSignal + Heta2B * BinarySinSignal * BinarySinSignal);
+
+  a[i] = orig[i] - BinarySignal + blin * orig[i];
+
+  // Avoid division by zero in `period`
+  if (period == 0.0f) return;
+
+  a[i] = a[i] / period - phase - truncf(a[i] / period - phase);
+  a[i] = a[i] + 0.5f - truncf(a[i] + 1.0f);
+
+  // Limit the exponent to avoid overflow
+  float exp_arg = -0.5f * a[i] * a[i] / width;
+  exp_arg = fminf(exp_arg, 80.0f);  // Clamp to a reasonable upper limit to prevent overflow in expf.
+  a[i] = expf(exp_arg);
+}
+
+
+extern "C" __global__ void
 AddInterpEccBinary(double *a, double *orig, double *InterpCosBinary,
                    double *InterpSinBinary, double BinaryPeriod,
                    double BinaryPhase, double BinaryAmp, double BinaryCosW,
@@ -202,7 +249,17 @@ extern "C" __global__ void AddCircBinary(double *a, double *orig,
          phase - blin * (orig[i] - pepoch);
 }
 
-extern "C" __global__ void MakeSignal(double *a, double *orig, double period,
+extern "C" __global__ void MakeSignalSingle(float *a, float *orig, double period,
+                                      float width, float phase) {
+  const int i = blockDim.x * blockIdx.x + threadIdx.x;
+
+  a[i] = orig[i] / period - phase - trunc(orig[i] / period - phase);
+  a[i] = (a[i] + 1) - trunc(a[i] + 1);
+  a[i] = a[i] - 0.5;
+  a[i] = exp(-0.5 * a[i] * a[i] / width);
+}
+
+extern "C" __global__ void MakeSignalDouble(double *a, double *orig, double period,
                                       double width, double phase) {
   const int i = blockDim.x * blockIdx.x + threadIdx.x;
 

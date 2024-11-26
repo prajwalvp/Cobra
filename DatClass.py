@@ -10,7 +10,7 @@ import cupy as cp
 
 class DatFile(object):
 
-    def __init__(self, root, subTime, bary=False, powerofTwo=False, bestprimeLength=True, FromPickle=False, doFFT=True):
+    def __init__(self, root, precision_flag, subTime, bary=False, powerofTwo=False, bestprimeLength=True, FromPickle=False, doFFT=True):
 
         self.root = root
         self.subTime = subTime
@@ -19,6 +19,7 @@ class DatFile(object):
         self.bestprimeLength = bestprimeLength
         self.FromPickle = FromPickle
         self.doFFT = doFFT
+        self.precision_flag = precision_flag
 
         self.RefMJD = None
         self.pepoch = None
@@ -143,22 +144,34 @@ class DatFile(object):
         if (self.subTime > 0):
             TDiff = self.RefMJD-self.subTime
 
-            print("Different Times: ", self.RefMJD, self.subTime, TDiff)
+            #print("Different Times: ", self.RefMJD, self.subTime, TDiff)
             self.BaseTime += TDiff*24*60*60
 
         if (self.doFFT == True):
             gpu_Data = cp.asarray(self.Data, dtype=cp.float64)
-            self.gpu_fft_data = cp.fft.rfft(gpu_Data)
+
+            if self.precision_flag == "single":
+                self.gpu_fft_data = cp.fft.rfft(gpu_Data).astype(cp.complex64)
+            elif self.precision_flag == "double":
+                self.gpu_fft_data = cp.fft.rfft(gpu_Data)
+
             self.gpu_fft_data = self.gpu_fft_data[1:-1]
             self.FSamps = len(self.gpu_fft_data)
 
             self.CalcNoise(cut=False, mode=1)
 
 
-            self.gpu_time = cp.asarray(self.BaseTime, dtype=cp.float64)
-            self.gpu_pulsar_signal = cp.empty(self.NSamps, dtype=cp.float64)
-            self.gpu_pulsar_fft = cp.empty(
-                self.NSamps//2+1, dtype=cp.complex128) #Complex64?
+            if self.precision_flag == "single":
+                self.gpu_time = cp.asarray(self.BaseTime, dtype=cp.float32)
+                self.gpu_pulsar_signal = cp.empty(self.NSamps, dtype=cp.float32)
+                self.gpu_pulsar_fft = cp.empty(
+                    self.NSamps//2+1, dtype=cp.complex64)
+            elif self.precision_flag == "double":
+                self.gpu_time = cp.asarray(self.BaseTime, dtype=cp.float64)
+                self.gpu_pulsar_signal = cp.empty(self.NSamps, dtype=cp.float64)
+                self.gpu_pulsar_fft = cp.empty(
+                    self.NSamps//2+1, dtype=cp.complex128)
+
 
             self.block_size = 128
             self.Tblocks = int(np.ceil(self.NSamps*1.0/self.block_size))
@@ -173,9 +186,16 @@ class DatFile(object):
         OComp = self.gpu_fft_data.get()
         NComp = CompRan*OComp
 
-        self.gpu_fft_data = cp.asarray(NComp, dtype= cp.complex128)
-        self.Real = cp.asarray(NComp.real, dtype=cp.float64)
-        self.Imag = cp.asarray(NComp.imag, dtype=cp.float64)
+        if self.precision_flag == "single":
+            self.gpu_fft_data = cp.asarray(NComp, dtype= cp.complex64)
+            self.Real = cp.asarray(NComp.real, dtype=cp.float32)
+            self.Imag = cp.asarray(NComp.imag, dtype=cp.float32)
+
+        elif self.precision_flag == "double":
+            self.gpu_fft_data = cp.asarray(NComp, dtype= cp.complex128)
+            self.Real = cp.asarray(NComp.real, dtype=cp.float64)
+            self.Imag = cp.asarray(NComp.imag, dtype=cp.float64)
+        
 
     def parseInf(self):
         inf = open(self.root+".inf").readlines()
@@ -286,7 +306,10 @@ class DatFile(object):
                 fftdata.real[Rbad] = np.random.normal(0, 1, NRbad)
                 fftdata.imag[Ibad] = np.random.normal(0, 1, NIbad)
                 print("bad", NRbad, NIbad)
-                self.gpu_fft_data = cp.asarray(fftdata, dtype=cp.complex128)
+                if self.precision_flag == "single":
+                    self.gpu_fft_data = cp.asarray(fftdata, dtype=cp.complex64)
+                elif self.precision_flag == "double":    
+                    self.gpu_fft_data = cp.asarray(fftdata, dtype=cp.complex128)
         if (mode == 1):
             fftD = self.gpu_fft_data.get()
             r2 = np.dot(fftD.real[self.FSamps//2:], fftD.real[self.FSamps//2:])
@@ -296,14 +319,17 @@ class DatFile(object):
             del fftD
 
             noise = np.sqrt((r2+i2)/noisesamps)
-            print("Noise mode 1: ", noise)
+            #print("Noise mode 1: ", noise)
             # self.Real = self.Real / noise
             # self.Imag = self.Imag / noise
             self.gpu_fft_data = self.gpu_fft_data / noise
             noisevec[:] = 1.0/noise
 
         # self.Noise = gpuarray.empty(self.FSamps, np.float64)
-        self.Noise = cp.asarray(noisevec, dtype=cp.float64)
+        if self.precision_flag == "single":
+            self.Noise = cp.asarray(noisevec, dtype=cp.float32)
+        elif self.precision_flag == "double":    
+            self.Noise = cp.asarray(noisevec, dtype=cp.float64)
 
     def WriteSignalToDat(self, outfile, noise=0):
         sig = self.gpu_pulsar_signal.get()

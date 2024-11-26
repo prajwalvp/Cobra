@@ -3,6 +3,7 @@ import Candidate
 import DatClass
 import time
 import logging
+import sys
 
 import pymultinest
 import emcee
@@ -21,7 +22,7 @@ import cupy as cp
 
 class Search(object):
 
-    def __init__(self):
+    def __init__(self, precision_flag):
         '''
         Typical use case Scenario for Cobra:
         MySearch = Cobra.Search()
@@ -37,6 +38,7 @@ class Search(object):
 
         self.Cand = None
         self.DatFiles = []
+        self.precision_flag = precision_flag
 
         self.CosOrbit = None
         self.SinOrbit = None
@@ -57,7 +59,8 @@ class Search(object):
         self.post = None
         self.ML = None
 
-        self.MakeSignal = None
+        self.MakeSignalSingle = None
+        self.MakeSignalDouble = None
         self.AddAcceleration = None
         self.AddCircBinary = None
         self.Scatter = None
@@ -74,26 +77,38 @@ class Search(object):
 
 
         kernel_code = importlib.resources.files("Cobra").joinpath("kernels.c").read_text()
-        kernel_names = ["AddAcceleration", "AddInterpCircBinary", "AddInterpEccBinary", "AddInterpGRBinary","AddInterpCircBinary2","AddCircBinary","MakeSignal","GetPhaseBins","Scatter"]
+        kernel_names = ["AddAcceleration", "AddInterpCircBinary", "AddInterpCircBinarySingle", "AddInterpEccBinary", "AddInterpGRBinary","AddInterpCircBinary2","AddCircBinary","MakeSignalSingle","MakeSignalDouble", "GetPhaseBins","Scatter"]
 
         mod = cp.RawModule(
                 code=kernel_code, name_expressions=kernel_names
                 )
 
-        self.MakeSignal = mod.get_function("MakeSignal")
+        self.MakeSignalSingle = mod.get_function("MakeSignalSingle")
+        self.MakeSignalDouble = mod.get_function("MakeSignalDouble")
         self.AddAcceleration = mod.get_function("AddAcceleration")
         self.AddCircBinary = mod.get_function("AddCircBinary")
         self.Scatter = mod.get_function("Scatter")
         self.GetPhaseBins = mod.get_function("GetPhaseBins")
         self.addInterpCircBinary = mod.get_function("AddInterpCircBinary")
+        self.addInterpCircBinarySingle = mod.get_function("AddInterpCircBinarySingle")
         self.addInterpEccBinary = mod.get_function("AddInterpEccBinary")
         self.addInterpGRBinary = mod.get_function("AddInterpGRBinary")
 
-        self.MultNoise = cp.ElementwiseKernel(
-            "complex128 a, float64 b",
-            "complex128 c",
-            "c = a*b",
-            "MultNoise")
+        if self.precision_flag == "single":
+            #print("Running with single precision")
+            self.MultNoise = cp.ElementwiseKernel(
+                "complex64 a, float32 b",
+                "complex64 c",
+                "c = a*b",
+                "MultNoise")
+        elif self.precision_flag == "double":
+            #print("Running with double precision")
+            self.MultNoise = cp.ElementwiseKernel(
+                "complex128 a, float64 b",
+                "complex128 c",
+                "c = a*b",
+                "MultNoise")
+
 
     def addCandidate(self, filename):
         '''
@@ -120,16 +135,29 @@ class Search(object):
         self.Cand = Candidate.Candidate(filename)
 
         if (self.Cand.FitCircBinary == True):
-            self.CosOrbit = cp.empty(
-                self.InterpBinarySteps+1, np.float64)
-            self.SinOrbit = cp.empty(
-                self.InterpBinarySteps+1, np.float64)
 
-            self.CPUCosOrbit, self.CPUSinOrbit = self.KeplersOrbit(0)
+            if self.precision_flag == "single":
+                self.CosOrbit = cp.empty(
+                    self.InterpBinarySteps+1, np.float32)
+                self.SinOrbit = cp.empty(
+                    self.InterpBinarySteps+1, np.float32)
 
-            #self.CosOrbit = cp.asarray(np.float64(self.CPUCosOrbit))
-            self.CosOrbit = cp.asarray(np.float64(self.CPUCosOrbit))
-            self.SinOrbit = cp.asarray(np.float64(self.CPUSinOrbit))
+                self.CPUCosOrbit, self.CPUSinOrbit = self.KeplersOrbit(0)
+
+                self.CosOrbit = cp.asarray(np.float32(self.CPUCosOrbit))
+                self.SinOrbit = cp.asarray(np.float32(self.CPUSinOrbit))
+
+            elif self.precision_flag == "double":
+                self.CosOrbit = cp.empty(
+                    self.InterpBinarySteps+1, np.float64)
+                self.SinOrbit = cp.empty(
+                    self.InterpBinarySteps+1, np.float64)
+
+                self.CPUCosOrbit, self.CPUSinOrbit = self.KeplersOrbit(0)
+
+                #self.CosOrbit = cp.asarray(np.float64(self.CPUCosOrbit))
+                self.CosOrbit = cp.asarray(np.float64(self.CPUCosOrbit))
+                self.SinOrbit = cp.asarray(np.float64(self.CPUSinOrbit))
 
         if (self.Cand.FitEccBinary == True):
 
@@ -235,7 +263,7 @@ class Search(object):
                 self.TrueAnomaly[i] = cp.asarray(
                     np.float64(self.CPUTrueAnomaly[i]))
 
-    def addDatFile(self, root, bary=False, powerofTwo=False, bestprimeLength=True, setRefMJD=None, FromPickle=False, doFFT=True):
+    def addDatFile(self, root, precision_flag="double", bary=False, powerofTwo=False, bestprimeLength=True, setRefMJD=None, FromPickle=False, doFFT=True):
         '''
         Add dat file to the search with root 'root'.  Requires root.dat and root.inf to be present in directory
         bary - perform barycentering using Tempo2 to scale the time axis for the model (default = True)
@@ -247,9 +275,9 @@ class Search(object):
                 print("setting ref:", setRefMJD)
                 RefMJD = setRefMJD
             self.DatFiles.append(DatClass.DatFile(
-                root, RefMJD, bary, powerofTwo, bestprimeLength, FromPickle, doFFT))
+                root, precision_flag, RefMJD, bary, powerofTwo, bestprimeLength, FromPickle, doFFT))
             self.pepoch = self.DatFiles[0].pepoch
-            print("First Pepoch setting:", self.pepoch)
+            #print("First Pepoch setting:", self.pepoch)
             self.length = self.DatFiles[0].BaseTime[-1] - \
                 self.DatFiles[0].BaseTime[0]
         else:
@@ -258,21 +286,22 @@ class Search(object):
                 print("setting ref:", setRefMJD)
                 RefMJD = setRefMJD
             self.DatFiles.append(DatClass.DatFile(
-                root, RefMJD, bary, powerofTwo, bestprimeLength, FromPickle, doFFT))
-            print("Pepoch before:", self.pepoch)
+                root, precision_flag, RefMJD, bary, powerofTwo, bestprimeLength, FromPickle, doFFT))
+            #print("Pepoch before:", self.pepoch)
             self.pepoch = ((len(self.DatFiles) - 1)*self.pepoch +
                            self.DatFiles[-1].pepoch)/len(self.DatFiles)
-            print("Pepoch after:", self.pepoch)
+            #print("Pepoch after:", self.pepoch)
             self.length = self.DatFiles[-1].BaseTime[-1] - \
                 self.DatFiles[0].BaseTime[0]
             print('RefMJD:', self.DatFiles[0].RefMJD, self.DatFiles[-1].RefMJD)
             # self.pepoch = (self.DatFiles[-1].BaseTime[-1] - self.DatFiles[0].BaseTime[0])/2
 
-    def gaussGPULike(self, x):
+    def gaussGPULike(self, x, sampler="multinest"):
 
         like = 0
         uniformprior = 0
 
+        #print(x)
         phase = x[0]
         width = 10.0**x[1]  # Width
         period = x[2]
@@ -330,13 +359,14 @@ class Search(object):
 
             BinaryPhase = BinaryPhase/(2*np.pi)
 
-            # period += BinaryAmp*blin*period
-            # print bsum, blin, bstd
-            x[6] = phase % 1 - 0.5
-            x[7] = period - BinaryAmp*blin*period
-            x[8] = BinaryAmp
-            x[9] = BinaryPhase % 1
-            x[10] = BinaryPeriod/24/60/60
+            if sampler == "multinest":
+                # period += BinaryAmp*blin*period
+                # print bsum, blin, bstd
+                x[6] = phase % 1 - 0.5
+                x[7] = period - BinaryAmp*blin*period
+                x[8] = BinaryAmp
+                x[9] = BinaryPhase % 1
+                x[10] = BinaryPeriod/24/60/60
 
         elif (self.Cand.FitEccBinary == True):
 
@@ -369,13 +399,14 @@ class Search(object):
 
             BinaryPhase = BinaryPhase/(2*np.pi)
 
-            x[8] = phase % 1
-            x[9] = period+BinaryAmp*blin*period
-            x[10] = BinaryAmp
-            x[11] = BinaryPhase % 1
-            x[12] = BinaryPeriod/24/60/60
-            x[13] = Omega
-            x[14] = Ecc
+            if sampler == "multinest":
+                x[8] = phase % 1
+                x[9] = period+BinaryAmp*blin*period
+                x[10] = BinaryAmp
+                x[11] = BinaryPhase % 1
+                x[12] = BinaryPeriod/24/60/60
+                x[13] = Omega
+                x[14] = Ecc
 
         elif (self.Cand.FitGRBinary == True):
 
@@ -419,21 +450,22 @@ class Search(object):
             phase += -BinaryAmp*bsum/period + BinaryAmp*blin*self.pepoch/period
             BinaryPhase = BinaryPhase/(2*np.pi)
 
-            x[10] = phase % 1
-            x[11] = period+BinaryAmp*blin*period
-            x[12] = BinaryAmp
-            x[13] = BinaryPhase % 1
-            x[14] = BinaryPeriod/24/60/60
-            x[15] = Omega
-            x[16] = Ecc
-            x[17] = M1
-            x[18] = M2
-            x[19] = OMDot*(180.0/np.pi)*365.25*86400.0*2.0*np.pi/BinaryPeriod
-            x[20] = SINI
-            x[21] = Gamma
-            x[22] = PBDot
-            x[23] = DTheta
-            x[24] = Dr
+            if sampler == "multinest":
+                x[10] = phase % 1
+                x[11] = period+BinaryAmp*blin*period
+                x[12] = BinaryAmp
+                x[13] = BinaryPhase % 1
+                x[14] = BinaryPeriod/24/60/60
+                x[15] = Omega
+                x[16] = Ecc
+                x[17] = M1
+                x[18] = M2
+                x[19] = OMDot*(180.0/np.pi)*365.25*86400.0*2.0*np.pi/BinaryPeriod
+                x[20] = SINI
+                x[21] = Gamma
+                x[22] = PBDot
+                x[23] = DTheta
+                x[24] = Dr
 
         elif (self.Cand.FitPKBinary == True):
 
@@ -525,11 +557,20 @@ class Search(object):
 
             elif (self.Cand.FitCircBinary == True):
 
-                eta = np.float64(2*np.pi/BinaryPeriod)
-                Beta = np.float64(eta*BinaryAmp)
-                H2Beta = np.float64(0.5*Beta*Beta)
+                if self.precision_flag == "single":
+                    eta = np.float32(2*np.pi/BinaryPeriod)
+                    Beta = np.float32(eta*BinaryAmp)
+                    H2Beta = np.float32(0.5*Beta*Beta)
+                    #print(self.DatFiles[i].gpu_pulsar_signal.dtype)
+                    self.addInterpCircBinarySingle((self.DatFiles[i].Tblocks, 1), (self.DatFiles[i].block_size, 1, 1),
+                        (self.DatFiles[i].gpu_pulsar_signal.astype(cp.float64),  self.DatFiles[i].gpu_time.astype(cp.float64), self.CosOrbit, self.SinOrbit, BinaryPeriod, BinaryPhase, BinaryAmp, phase,  period, width**2, BinaryAmp*blin,  eta, Beta, H2Beta))
+                    
+                elif self.precision_flag == "double":    
+                    eta = np.float64(2*np.pi/BinaryPeriod)
+                    Beta = np.float64(eta*BinaryAmp)
+                    H2Beta = np.float64(0.5*Beta*Beta)
 
-                self.addInterpCircBinary((self.DatFiles[i].Tblocks, 1), (self.DatFiles[i].block_size, 1, 1),
+                    self.addInterpCircBinary((self.DatFiles[i].Tblocks, 1), (self.DatFiles[i].block_size, 1, 1),
                         (self.DatFiles[i].gpu_pulsar_signal,  self.DatFiles[i].gpu_time, self.CosOrbit, self.SinOrbit, BinaryPeriod, BinaryPhase, BinaryAmp, phase,  period, width**2, BinaryAmp*blin,  eta, Beta, H2Beta))
                                          
 
@@ -543,20 +584,36 @@ class Search(object):
                                      phase, width**2))  
 
             else:
-                self.MakeSignal((self.DatFiles[i].Tblocks, 1), (self.DatFiles[i].block_size, 1, 1), (self.DatFiles[i].gpu_pulsar_signal, 
+                if self.precision_flag == "single":
+                    self.MakeSignalSingle((self.DatFiles[i].Tblocks, 1), (self.DatFiles[i].block_size, 1, 1), (self.DatFiles[i].gpu_pulsar_signal, 
                                                                                                      self.DatFiles[i].gpu_time, 
                                                                                                      period, 
                                                                                                      width**2, 
                                                                                                      phase))
+                elif self.precision_flag == "double":
+                    self.MakeSignalDouble((self.DatFiles[i].Tblocks, 1), (self.DatFiles[i].block_size, 1, 1), (self.DatFiles[i].gpu_pulsar_signal, 
+                                                                                                     self.DatFiles[i].gpu_time, 
+                                                                                                     period, 
+                                                                                                     width**2, 
+                                                                                                     phase))
+            # Apply FFT
+            if self.precision_flag == "single":
+                #print(self.DatFiles[i].gpu_pulsar_signal.dtype)
+                self.DatFiles[i].gpu_pulsar_fft = cp.fft.rfft(self.DatFiles[i].gpu_pulsar_signal.astype(cp.float32))
+            elif self.precision_flag == "double":
+                self.DatFiles[i].gpu_pulsar_fft = cp.fft.rfft(self.DatFiles[i].gpu_pulsar_signal)
 
-            self.DatFiles[i].gpu_pulsar_fft = cp.fft.rfft(self.DatFiles[i].gpu_pulsar_signal)
 
+            
+            # Apply scatter condition  
             if (self.Cand.FitScatter == True):
                 ChanScale = (
                     (self.DatFiles[i].LowChan*10.0**6)**4)/(10.0**(9.0*4.0))
 
                 tau = (10.0**x[3])/ChanScale
-                self.Scatter((self.DatFiles[i].Fblocks, 1), (self.block_size, 1, 1), (rsig, isig, tau, self.DatFiles[i].SampleFreqs)) 
+                self.Scatter((self.DatFiles[i].Fblocks, 1), (self.block_size, 1, 1), (rsig, isig, tau, self.DatFiles[i].SampleFreqs))
+
+            # Multiply with noise
             output_array = cp.empty_like(self.DatFiles[i].gpu_pulsar_fft[1:-1])    
             self.MultNoise(
                 self.DatFiles[i].gpu_pulsar_fft[1:-1], self.DatFiles[i].Noise, output_array)
@@ -628,7 +685,11 @@ class Search(object):
 				#plt.show()
 				'''
         # like += uniformprior
-        return like, x
+        if sampler == "multinest":
+            return like, x
+        else:
+            #print(like)
+            return like
 
     def Simulate(self, period, width):
 
@@ -683,6 +744,53 @@ class Search(object):
 
         return like
 
+    def calculate_derived_params(self, params):
+        """
+        Calculate certain derived parameters that are not actually sampled. 
+        Can be used to visualise the posteriors post sampling with actual physically useful parameters
+        """
+        #Initially set derived parameters same as original parameters before making the necessary changes
+        derived_params = params
+        phase = params[0]
+        width = 10.0**params[1]  # Width
+        period = params[2]
+
+        if (self.Cand.FitCircBinary == True):
+
+            #print(params)
+            BinaryAmp = 10.0**params[3]
+            BinaryPhase = params[4]
+            BinaryPeriod = (10.0**params[5])*24*60*60
+
+            # BinaryPhase -= 2*np.pi*self.DatFiles[0].BaseTime[0]/BinaryPeriod
+            BinaryPhase -= 2*np.pi * \
+                (0.0*self.length + self.DatFiles[0].BaseTime[0])/BinaryPeriod
+            BinaryPhase = BinaryPhase % (2*np.pi)
+
+            bsum, blin, bstd = self.CircSum(
+                self.CPUSinOrbit, BinaryPeriod, BinaryPhase, interpstep=1024)
+
+        
+            BinaryAmp = BinaryAmp/bstd
+
+            phase += -BinaryAmp*bsum/period + BinaryAmp*blin*self.pepoch/period
+
+            BinaryPhase = BinaryPhase/(2*np.pi)
+
+            # period += BinaryAmp*blin*period
+            # print bsum, blin, bstd
+            derived_params[0] = phase % 1 - 0.5 
+            derived_params[2] = period - BinaryAmp*blin*period
+
+            derived_params[3] = BinaryAmp
+            derived_params[4] = BinaryPhase % 1
+            derived_params[5] = BinaryPeriod/24/60/60
+
+
+        return derived_params    
+
+
+
     def log_probability(self, params):
         """
         Log-probability function combining prior and likelihood for emcee, with conditional parameter wrapping.
@@ -693,9 +801,6 @@ class Search(object):
         Returns:
             float: The log-probability (log-prior + log-likelihood) if valid, else -np.inf.
         """
-
-        # Calculate derived parameters which won't be sampled
-        #derived_params = calculate_derived_parameters(params)
 
 
         # Transform params with wrapping and prior ranges
@@ -712,19 +817,26 @@ class Search(object):
         log_prior = 0.0
         for i in range(self.Cand.n_dims):
             if not (self.Cand.pmin[i] <= transformed_params[i] <= self.Cand.pmax[i]):
-                return -np.inf  # Return -inf if outside prior bounds
+                return -np.inf, np.zeros(self.Cand.n_dims)  # Return -inf if outside prior bounds
    
-
 
         # Calculate log-likelihood
         #log_likelihood, dp = self.gaussGPULike(transformed_params)
-        log_likelihood = self.gaussGPULike(transformed_params)
+        log_likelihood = self.gaussGPULike(transformed_params, "emcee")
         if log_likelihood == -np.inf:
-            return -np.inf  # Return -inf if likelihood is zero or negative
+            return -np.inf, np.zeros(self.Cand.n_dims)  # Return -inf if likelihood is zero or negative
     
+        # Calculate derived parameters which won't be sampled
+        derived_params = self.calculate_derived_params(transformed_params)
+
+        # Ensure derived_params has consistent output length
+        derived_params = np.asarray(derived_params)
+        if derived_params.shape[0] != self.Cand.n_dims:
+            raise ValueError("Derived parameters array has an inconsistent length.")
+
         # Combine log-prior and log-likelihood
-        #return log_prior + log_likelihood, derived_params
-        return float(log_prior) + float(log_likelihood)
+        return float(log_prior) + float(log_likelihood), derived_params
+        #return float(log_prior) + float(log_likelihood)
 
 
 
@@ -764,38 +876,53 @@ class Search(object):
         if (doplot == True):
             self.plotResult()
 
-    def sample_emcee(self, nwalkers=32, nsteps=1000, resume=False, doplot=False, sample=True):
+
+    def sample_emcee(self, start_params, nwalkers=32, nsteps=50000, resume=False, doplot=False, sample=True, define_start=True):
         '''
         Sampling function using emcee.
-
+    
         nwalkers - number of walkers (chains)
         nsteps - number of steps each walker takes
         resume - whether to resume (handle separately if needed)
         doplot - make plots after sampling
         '''
         if sample:
-            # Define initial positions around some starting guess, e.g., zeros
-            initial_pos = np.random.rand(nwalkers, self.Cand.n_dims)  # Modify if a different initial position is desired
-
+            if define_start: 
+                # Define initial positions with random starting positions, as per your requirement
+                normalised_ph = (start_params[0] - self.Cand.pmin[0]) / (self.Cand.pmax[0] - self.Cand.pmin[0])
+                normalised_w = (start_params[1] - self.Cand.pmin[1]) / (self.Cand.pmax[1] - self.Cand.pmin[1])
+                normalised_p0 = (start_params[2] - self.Cand.pmin[2]) / (self.Cand.pmax[2] - self.Cand.pmin[2])
+                normalised_a1 = (start_params[3] - self.Cand.pmin[3]) / (self.Cand.pmax[3] - self.Cand.pmin[3])
+                normalised_bph = (start_params[4] - self.Cand.pmin[4]) / (self.Cand.pmax[4] - self.Cand.pmin[4])
+                normalised_pb = (start_params[5] - self.Cand.pmin[5]) / (self.Cand.pmax[5] - self.Cand.pmin[5])
+    
+                # Initialize all dimensions with random values between 0 and 1
+                initial_pos = np.random.rand(nwalkers, self.Cand.n_dims)
+                initial_pos[:, 0] = normalised_ph + 1e-5 * np.random.randn(nwalkers)
+                initial_pos[:, 1] = normalised_w + 1e-5 * np.random.randn(nwalkers)
+                initial_pos[:, 2] = normalised_p0 + 1e-5 * np.random.randn(nwalkers)
+                initial_pos[:, 3] = normalised_a1 + 1e-5 * np.random.randn(nwalkers)
+                initial_pos[:, 4] = normalised_bph + 1e-5 * np.random.randn(nwalkers)
+                initial_pos[:, 5] = normalised_pb + 1e-5 * np.random.randn(nwalkers)
+                initial_pos = np.clip(initial_pos, 0, 1)  # Ensure values stay within [0, 1] for all dimensions
+    
+            else:
+                # Set random starting positions for each parameter
+                initial_pos = np.random.rand(nwalkers, self.Cand.n_dims)
+    
             # Create sampler with log-probability function
             sampler = emcee.EnsembleSampler(nwalkers, self.Cand.n_dims, self.log_probability)
-
-            # Run sampling
-            #sampler.run_mcmc(initial_pos, nsteps, progress=True)
-
-
-            # Assuming `sampler` is your initialized EnsembleSampler and `initial_state` is your starting position
-            max_steps = 10000  # Define a maximum number of steps
+    
+            # Set a maximum number of steps and an interval to check convergence
+            max_steps = nsteps  # Defined as 20000 by default now
             check_interval = 500  # Check for convergence every 500 steps
             old_tau = np.inf
-
+    
+            # Run the sampling loop with convergence checks
             for sample in sampler.sample(initial_pos, iterations=max_steps, progress=True):
-                # Every `check_interval` steps, check convergence
                 if sampler.iteration % check_interval == 0:
                     try:
-                        # Calculate the autocorrelation time
                         tau = sampler.get_autocorr_time(tol=0)
-                        # Check if the chains have converged
                         converged = np.all(tau * 50 < sampler.iteration)
                         converged &= np.all(np.abs(old_tau - tau) / tau < 0.01)
                         if converged:
@@ -805,22 +932,21 @@ class Search(object):
                     except emcee.autocorr.AutocorrError:
                         print("Not enough samples yet to estimate tau reliably")
                         pass
-
-            # Now retrieve the flattened samples, discarding burn-in samples
-            #samples = sampler.get_chain(discard=int(0.2 * sampler.iteration), flat=True)
-
-
-            # Access samples
-            #samples = sampler.get_chain(flat=True)  # Flatten chain if desired
-
-            # Optional: Plotting or post-processing as needed
+    
+            # Retrieve the flattened samples after burn-in
+            #burn_in = int(0.2 * sampler.iteration)
+            #samples = sampler.get_chain(discard=burn_in, flat=True)
+    
+            # Optional: Plotting or post-processing
             #if doplot:
-                # Generate plots here, e.g., corner plot
-            #    pass
+            #    import corner
+            #    corner.corner(samples)
+            
+            return sampler
 
-            return sampler  # Or save samples if preferred 
 
-    def save_emcee_output(self, sampler, output_basename='test', burn_in=0, thin=1):
+
+    def save_emcee_output(self, sampler, output_basename='test', thin=1):
         """
         Save the main data products from an emcee run to files.
         
@@ -835,6 +961,7 @@ class Search(object):
                 Factor by which to thin the chain.
         """
         # Chain (samples) - save flattened and raw chains
+        burn_in = int(0.2 * sampler.iteration)
         flat_samples = sampler.get_chain(discard=burn_in, thin=thin, flat=True)
         np.savetxt(f"{output_basename}_chain.txt", flat_samples)
         

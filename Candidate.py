@@ -314,7 +314,7 @@ class Candidate(object):
 
         self.pmin = np.array(self.pmin)
         self.pmax = np.array(self.pmax)
-        print("wrapped", self.wrapped)
+        #print("wrapped", self.wrapped)
         self.wrapped = np.array(self.wrapped).astype(int)
 
         self.n_dims = len(self.params)

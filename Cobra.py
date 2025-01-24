@@ -4,6 +4,7 @@ import DatClass
 import time
 import logging
 import sys
+import signal
 
 import pymultinest
 import emcee
@@ -290,7 +291,7 @@ class Search(object):
             #print("Pepoch before:", self.pepoch)
             self.pepoch = ((len(self.DatFiles) - 1)*self.pepoch +
                            self.DatFiles[-1].pepoch)/len(self.DatFiles)
-            #print("Pepoch after:", self.pepoch)
+            print("Pepoch after:", self.pepoch)
             self.length = self.DatFiles[-1].BaseTime[-1] - \
                 self.DatFiles[0].BaseTime[0]
             print('RefMJD:', self.DatFiles[0].RefMJD, self.DatFiles[-1].RefMJD)
@@ -527,7 +528,7 @@ class Search(object):
             x[4] = period
 
         for i in range(len(self.DatFiles)):
-
+            #print(i)
             if (self.Cand.FitEccBinary == True):
 
                 CosOmega = np.float64(np.cos(Omega))
@@ -688,7 +689,9 @@ class Search(object):
         if sampler == "multinest":
             return like, x
         else:
-            #print(like)
+            #np.set_printoptions(precision=12)
+            #print(like, x)
+            print(like)
             return like
 
     def Simulate(self, period, width):
@@ -822,7 +825,7 @@ class Search(object):
 
         # Calculate log-likelihood
         #log_likelihood, dp = self.gaussGPULike(transformed_params)
-        log_likelihood = self.gaussGPULike(transformed_params, "emcee")
+        log_likelihood = self.gaussGPULike(transformed_params, sampler="emcee")
         if log_likelihood == -np.inf:
             return -np.inf, np.zeros(self.Cand.n_dims)  # Return -inf if likelihood is zero or negative
     
@@ -886,53 +889,70 @@ class Search(object):
         resume - whether to resume (handle separately if needed)
         doplot - make plots after sampling
         '''
-        if sample:
-            if define_start: 
-                # Define initial positions with random starting positions, as per your requirement
-                normalised_ph = (start_params[0] - self.Cand.pmin[0]) / (self.Cand.pmax[0] - self.Cand.pmin[0])
-                normalised_w = (start_params[1] - self.Cand.pmin[1]) / (self.Cand.pmax[1] - self.Cand.pmin[1])
-                normalised_p0 = (start_params[2] - self.Cand.pmin[2]) / (self.Cand.pmax[2] - self.Cand.pmin[2])
-                normalised_a1 = (start_params[3] - self.Cand.pmin[3]) / (self.Cand.pmax[3] - self.Cand.pmin[3])
-                normalised_bph = (start_params[4] - self.Cand.pmin[4]) / (self.Cand.pmax[4] - self.Cand.pmin[4])
-                normalised_pb = (start_params[5] - self.Cand.pmin[5]) / (self.Cand.pmax[5] - self.Cand.pmin[5])
-    
-                # Initialize all dimensions with random values between 0 and 1
-                initial_pos = np.random.rand(nwalkers, self.Cand.n_dims)
-                initial_pos[:, 0] = normalised_ph + 1e-5 * np.random.randn(nwalkers)
-                initial_pos[:, 1] = normalised_w + 1e-5 * np.random.randn(nwalkers)
-                initial_pos[:, 2] = normalised_p0 + 1e-5 * np.random.randn(nwalkers)
-                initial_pos[:, 3] = normalised_a1 + 1e-5 * np.random.randn(nwalkers)
-                initial_pos[:, 4] = normalised_bph + 1e-5 * np.random.randn(nwalkers)
-                initial_pos[:, 5] = normalised_pb + 1e-5 * np.random.randn(nwalkers)
-                initial_pos = np.clip(initial_pos, 0, 1)  # Ensure values stay within [0, 1] for all dimensions
-    
+
+        sampler = None
+
+        def handle_sigint(signum, frame):
+            """Handle SIGINT signal to save sampler data."""
+            if sampler is not None and sampler.iteration > 0:
+                print("SIGINT received. Saving sampler output...")
+                self.save_emcee_output(sampler, output_basename="temp_emcee_output")
             else:
-                # Set random starting positions for each parameter
-                initial_pos = np.random.rand(nwalkers, self.Cand.n_dims)
+                print("SIGINT received, but sampler is not initialized.")
+            raise KeyboardInterrupt  # Re-raise to exit the program
+
+        # Register the signal handler
+        signal.signal(signal.SIGINT, handle_sigint) 
+
+        try: 
+            if sample:
+                if define_start: 
+                    # Define initial positions with random starting positions, as per your requirement
+                    normalised_ph = (start_params[0] - self.Cand.pmin[0]) / (self.Cand.pmax[0] - self.Cand.pmin[0])
+                    normalised_w = (start_params[1] - self.Cand.pmin[1]) / (self.Cand.pmax[1] - self.Cand.pmin[1])
+                    normalised_p0 = (start_params[2] - self.Cand.pmin[2]) / (self.Cand.pmax[2] - self.Cand.pmin[2])
+                    normalised_a1 = (start_params[3] - self.Cand.pmin[3]) / (self.Cand.pmax[3] - self.Cand.pmin[3])
+                    normalised_bph = (start_params[4] - self.Cand.pmin[4]) / (self.Cand.pmax[4] - self.Cand.pmin[4])
+                    normalised_pb = (start_params[5] - self.Cand.pmin[5]) / (self.Cand.pmax[5] - self.Cand.pmin[5])
     
-            # Create sampler with log-probability function
-            sampler = emcee.EnsembleSampler(nwalkers, self.Cand.n_dims, self.log_probability)
+                    # Initialize all dimensions with random values between 0 and 1
+                    initial_pos = np.random.rand(nwalkers, self.Cand.n_dims)
+                    initial_pos[:, 0] = normalised_ph + 1e-5 * np.random.randn(nwalkers)
+                    initial_pos[:, 1] = normalised_w + 1e-5 * np.random.randn(nwalkers)
+                    initial_pos[:, 2] = normalised_p0 + 1e-5 * np.random.randn(nwalkers)
+                    initial_pos[:, 3] = normalised_a1 + 1e-5 * np.random.randn(nwalkers)
+                    initial_pos[:, 4] = normalised_bph + 1e-5 * np.random.randn(nwalkers)
+                    initial_pos[:, 5] = normalised_pb + 1e-5 * np.random.randn(nwalkers)
+                    initial_pos = np.clip(initial_pos, 0, 1)  # Ensure values stay within [0, 1] for all dimensions
+                    #print(initial_pos)
     
-            # Set a maximum number of steps and an interval to check convergence
-            max_steps = nsteps  # Defined as 20000 by default now
-            check_interval = 500  # Check for convergence every 500 steps
-            old_tau = np.inf
+                else:
+                    # Set random starting positions for each parameter
+                    initial_pos = np.random.rand(nwalkers, self.Cand.n_dims)
     
-            # Run the sampling loop with convergence checks
-            for sample in sampler.sample(initial_pos, iterations=max_steps, progress=True):
-                if sampler.iteration % check_interval == 0:
-                    try:
-                        tau = sampler.get_autocorr_time(tol=0)
-                        converged = np.all(tau * 50 < sampler.iteration)
-                        converged &= np.all(np.abs(old_tau - tau) / tau < 0.01)
-                        if converged:
-                            print(f"Chains have converged after {sampler.iteration} steps.")
-                            break
-                        old_tau = tau
-                    except emcee.autocorr.AutocorrError:
-                        print("Not enough samples yet to estimate tau reliably")
-                        pass
+                # Create sampler with log-probability function
+                sampler = emcee.EnsembleSampler(nwalkers, self.Cand.n_dims, self.log_probability)
     
+                # Set a maximum number of steps and an interval to check convergence
+                max_steps = nsteps  # Defined as 20000 by default now
+                check_interval = 500  # Check for convergence every 500 steps
+                old_tau = np.inf
+    
+                # Run the sampling loop with convergence checks
+                for sample in sampler.sample(initial_pos, iterations=max_steps, progress=True):
+                    if sampler.iteration % check_interval == 0:
+                        try:
+                            tau = sampler.get_autocorr_time(tol=0)
+                            converged = np.all(tau * 50 < sampler.iteration)
+                            converged &= np.all(np.abs(old_tau - tau) / tau < 0.01)
+                            if converged:
+                                print(f"Chains have converged after {sampler.iteration} steps.")
+                                break
+                            old_tau = tau
+                        except emcee.autocorr.AutocorrError:
+                            print("Not enough samples yet to estimate tau reliably")
+                            pass
+                return sampler
             # Retrieve the flattened samples after burn-in
             #burn_in = int(0.2 * sampler.iteration)
             #samples = sampler.get_chain(discard=burn_in, flat=True)
@@ -941,9 +961,9 @@ class Search(object):
             #if doplot:
             #    import corner
             #    corner.corner(samples)
+        except KeyboardInterrupt:
+            print("Sampling interrupted by user")
             
-            return sampler
-
 
 
     def save_emcee_output(self, sampler, output_basename='test', thin=1):
@@ -961,6 +981,10 @@ class Search(object):
                 Factor by which to thin the chain.
         """
         # Chain (samples) - save flattened and raw chains
+        if sampler.iteration is None:
+            print("Sampler iterations are None. Skipping output save.")
+            return         
+  
         burn_in = int(0.2 * sampler.iteration)
         flat_samples = sampler.get_chain(discard=burn_in, thin=thin, flat=True)
         np.savetxt(f"{output_basename}_chain.txt", flat_samples)

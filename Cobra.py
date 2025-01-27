@@ -917,12 +917,12 @@ class Search(object):
     
                     # Initialize all dimensions with random values between 0 and 1
                     initial_pos = np.random.rand(nwalkers, self.Cand.n_dims)
-                    initial_pos[:, 0] = normalised_ph + 1e-5 * np.random.randn(nwalkers)
-                    initial_pos[:, 1] = normalised_w + 1e-5 * np.random.randn(nwalkers)
-                    initial_pos[:, 2] = normalised_p0 + 1e-5 * np.random.randn(nwalkers)
-                    initial_pos[:, 3] = normalised_a1 + 1e-5 * np.random.randn(nwalkers)
-                    initial_pos[:, 4] = normalised_bph + 1e-5 * np.random.randn(nwalkers)
-                    initial_pos[:, 5] = normalised_pb + 1e-5 * np.random.randn(nwalkers)
+                    initial_pos[:, 0] = normalised_ph + 1e-9 * np.random.randn(nwalkers)
+                    initial_pos[:, 1] = normalised_w + 1e-9* np.random.randn(nwalkers)
+                    initial_pos[:, 2] = normalised_p0 + 1e-9 * np.random.randn(nwalkers)
+                    initial_pos[:, 3] = normalised_a1 + 1e-9 * np.random.randn(nwalkers)
+                    initial_pos[:, 4] = normalised_bph + 1e-9 * np.random.randn(nwalkers)
+                    initial_pos[:, 5] = normalised_pb + 1e-9 * np.random.randn(nwalkers)
                     initial_pos = np.clip(initial_pos, 0, 1)  # Ensure values stay within [0, 1] for all dimensions
                     #print(initial_pos)
     
@@ -1014,7 +1014,7 @@ class Search(object):
 
 
         # Retrieve the derived parameters
-        derived_params = sampler.get_blobs()
+        derived_params = sampler.get_blobs(discard = burn_in, thin=thin, flat=True)
         np.save(f"{output_basename}_derived_params.txt", derived_params)
 
         print("Data products saved successfully.")

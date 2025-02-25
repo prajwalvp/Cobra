@@ -941,6 +941,7 @@ class Search(object):
                 # Run the sampling loop with convergence checks
                 for sample in sampler.sample(initial_pos, iterations=max_steps, progress=True):
                     if sampler.iteration % check_interval == 0:
+                        self.save_emcee_output(sampler, output_basename=f"intermediate_emcee_output_{sampler.iteration}") # Save intermediate chains for every check interval
                         try:
                             tau = sampler.get_autocorr_time(tol=0)
                             converged = np.all(tau * 50 < sampler.iteration)
@@ -1015,16 +1016,14 @@ class Search(object):
 
         # Retrieve the derived parameters
         derived_params = sampler.get_blobs(discard = burn_in, thin=thin, flat=True)
-        np.save(f"{output_basename}_derived_params.txt", derived_params)
+        np.savetxt(f"{output_basename}_derived_params.txt", derived_params)
+
+
+        # Retrieve the raw derived parameters
+        raw_derived_params = sampler.get_blobs()
+        np.save(f"{output_basename}_raw_derived_params.npy", raw_derived_params)
 
         print("Data products saved successfully.")
-        #return {
-        #    "flat_samples": flat_samples,
-        #    "raw_chain": raw_chain,
-        #    "flat_log_prob": flat_log_prob,
-        #    "raw_log_prob": raw_log_prob,
-        #    "acceptance_fraction": acceptance_fraction,
-        #    "autocorr_time": autocorr_time
 
 
     def AccSum(self, Acceleration):

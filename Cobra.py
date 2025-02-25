@@ -967,7 +967,7 @@ class Search(object):
             
 
 
-    def save_emcee_output(self, sampler, output_basename='test', thin=1):
+    def save_emcee_output(self, sampler, output_basename='test', thin=1, burn_in_fraction = 0.2):
         """
         Save the main data products from an emcee run to files.
         
@@ -986,11 +986,12 @@ class Search(object):
             print("Sampler iterations are None. Skipping output save.")
             return         
   
-        burn_in = int(0.2 * sampler.iteration)
+        burn_in = int(burn_in_fraction * sampler.iteration)
+
+        # Chains - save flattened and and raw chains
         flat_samples = sampler.get_chain(discard=burn_in, thin=thin, flat=True)
         np.savetxt(f"{output_basename}_chain.txt", flat_samples)
         
-        # Raw chain in full shape
         raw_chain = sampler.get_chain()
         np.save(f"{output_basename}_raw_chain.npy", raw_chain)
 

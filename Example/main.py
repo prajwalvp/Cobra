@@ -3,11 +3,10 @@ import Cobra
 
 MySearch = Cobra.Search()
 
-#MySearch.addDatFile('NoBinary')
-MySearch.addDatFile('Ter5A_test')
+MySearch.addDatFile('NoBinary')
 
-MySearch.addCandidate('Ter5A_prior.dat')
-MySearch.ChainRoot = './results/Ter5A_test-'
+MySearch.addCandidate('Cand1.dat')
+MySearch.ChainRoot = './results/Cand1-'
 
 MySearch.sample(doplot = True, resume=True, nlive = 200)
 

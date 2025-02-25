@@ -126,8 +126,8 @@ class Search(object):
  
         Optional lines are:
 
-        Phase  ph  d_ph
-        Width log10_w dlog10_w
+        Phase  min_ph  max_ph
+        Width  min_log10_w max_log10_w
         Acceleration  min_a max_a
         CircBinary min_log10_bp max_log10_bp min_log10_ba max_log10d_ba 
         Scattering min_log10_s max_log10_s

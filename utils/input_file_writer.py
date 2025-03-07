@@ -67,7 +67,7 @@ def read_bestprof(bestprof_file):
 
 
 
-def makeCandidate(input_files, param_file, time_span):
+def makeCandidate(input_files, param_file, time_span, file_tag):
     """
     This function creates a Cobra candidate file with default priors set based on initial parameters obtained either from a par file or bestprof file
     """
@@ -127,10 +127,10 @@ def makeCandidate(input_files, param_file, time_span):
     dA1_input = 0.5
     dPb_input = 0.5
      
-    with open("candidate_{}.dat".format(time_span),"w") as f:
-        f.write("Period {} {}\n".format(P0_input, dP0_input))
+    with open("{}_cobra_input_{}.dat".format(file_tag, time_span),"w") as f:
         f.write("Phase -0.5 0.5\n")
         f.write("Width -2 0\n")
+        f.write("Period {} {}\n".format(P0_input, dP0_input))
         f.write("CircBinary {} {} {} {}\n".format(PB_ip - dPb_input, PB_ip + dPb_input, A1_ip - dA1_input, A1_ip + dA1_input))
 
     f.close()
@@ -139,14 +139,15 @@ def makeCandidate(input_files, param_file, time_span):
 def parse_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Write out a candidate file for COBRA based on given input dedispersed files and a pulsar par or PRESTO bestprof file')
-    parser.add_argument('--dat_files', required=True, help='List of al dat files (spaced)')
+    parser.add_argument('--dat_files', required=True, help='List of all time ordered dedispersed files (spaced)')
     parser.add_argument('--param_file', required=True, help='Par file or bestprof file to use for guessing initial parameters')
     parser.add_argument('--time_span', required=True, help='Time span of all dat files input in seconds')
+    parser.add_argument('--file_tag', required=True, help='Output candidate file tag')
     return parser.parse_args()
 
 
 
 if __name__ == "__main__":
     args = parse_arguments()
-    makeCandidate(args.dat_files, args.param_file, args.time_span) 
+    makeCandidate(args.dat_files, args.param_file, args.time_span, args.file_tag) 
       

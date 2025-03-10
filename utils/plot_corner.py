@@ -16,9 +16,9 @@ def load_parameter_limits(param_file):
     
     pmin = np.zeros(6, dtype=float)
     pmax = np.zeros(6, dtype=float)
-    
-    pmin[0], pmax[0] = map(float, data[0].strip().split()[3:5])
-    pmin[1], pmax[1] = map(float, data[1].strip().split()[3:5])
+   
+    pmin[0], pmax[0] = map(float, data[0].strip().split()[1:3])
+    pmin[1], pmax[1] = map(float, data[1].strip().split()[1:3])
     P, dP = map(float, data[2].strip().split()[1:3])
     pmin[2], pmax[2] = P - dP, P + dP
     pmin[3], pmax[3] = map(float, data[3].strip().split()[3:5])

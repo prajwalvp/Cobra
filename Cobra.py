@@ -880,7 +880,7 @@ class Search(object):
             self.plotResult()
 
 
-    def sample_emcee(self, start_params, nwalkers=32, nsteps=50000, resume=False, doplot=False, sample=True, define_start=True):
+    def sample_emcee(self, start_params, nwalkers=32, nsteps=50000, resume=False, doplot=False, sample=True, define_start=True, move='stretch'):
         '''
         Sampling function using emcee.
     
@@ -931,11 +931,21 @@ class Search(object):
                     initial_pos = np.random.rand(nwalkers, self.Cand.n_dims)
     
                 # Create sampler with log-probability function
-                sampler = emcee.EnsembleSampler(nwalkers, self.Cand.n_dims, self.log_probability)
-    
+                if move == 'stretch':
+                    sampler = emcee.EnsembleSampler(nwalkers, self.Cand.n_dims, self.log_probability)
+                elif move == 'snooker':    
+                    sampler = emcee.EnsembleSampler(nwalkers, self.Cand.n_dims, self.log_probability,  moves=emcee.moves.DESnookerMove())
+                elif 'mixed' in move:
+                    stretch_weight = float(move[1]) 
+                    snooker_weight = float(move[2]) 
+                    mixed_moves = [(emcee.moves.StretchMove(), stretch_weight),  #  stretch move
+                             (emcee.moves.DESnookerMove(), snooker_weight)]  #  snooker move
+                    sampler = emcee.EnsembleSampler(nwalkers, self.Cand.n_dims, self.log_probability,  moves=mixed_moves)
+
+                
                 # Set a maximum number of steps and an interval to check convergence
                 max_steps = nsteps  # Defined as 20000 by default now
-                check_interval = 500  # Check for convergence every 500 steps
+                check_interval = 1000  # Check for convergence every 500 steps
                 old_tau = np.inf
     
                 # Run the sampling loop with convergence checks
